@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="panel">
+  <p><span class="tag">{{ season }}</span> season — F1 race, fastest-lap and championship
+  probabilities from a two-model Monte Carlo simulator.</p>
+  {% if ingested %}
+    <p class="muted">Data ingested. Predictions appear here once the pace model and race
+    simulator are built.</p>
+  {% else %}
+    <p class="muted">No data ingested yet. Run
+    <code>python -m f1pred.ingest --season {{ season }}</code> on the server.</p>
+  {% endif %}
+</div>
+<div class="panel muted">
+  <p>Coming up, in build order: post-quali pace model &rarr; DNF model + race simulator &rarr;
+  championship simulator &rarr; car profiles &amp; track fingerprints &rarr; fastest-lap model
+  &rarr; pre-quali mode.</p>
+</div>
+{% endblock %}

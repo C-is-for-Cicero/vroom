@@ -1,0 +1,28 @@
+# data (rebuilt from APIs; raw/cache are never committed)
+data/raw/
+data/cache/
+data/processed/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# app state
+*.sqlite
+*.sqlite3
+*.db
+
+# env / secrets
+.env
+
+# notebooks are disposable; checkpoints never belong in git
+.ipynb_checkpoints/
+
+# OS
+.DS_Store

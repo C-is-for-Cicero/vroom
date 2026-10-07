@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Vroom{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --text: #e8e8ea;
+      --muted: #9aa0ab;
+      --accent: #e10600;
+      --border: #262b35;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+    header {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      padding: 1rem 1.25rem;
+      border-bottom: 2px solid var(--accent);
+    }
+    header h1 { margin: 0; font-size: 1.3rem; letter-spacing: 0.08em; text-transform: uppercase; }
+    header nav { display: flex; gap: 1rem; flex-wrap: wrap; }
+    header a { color: var(--muted); text-decoration: none; font-size: 0.95rem; }
+    header a:hover { color: var(--text); }
+    main { max-width: 64rem; margin: 0 auto; padding: 1.5rem 1rem; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .muted { color: var(--muted); }
+    .tag { color: var(--accent); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Vroom</h1>
+    <nav>
+      <a href="/">Race</a>
+      <a href="/">Championship</a>
+      <a href="/">Track record</a>
+      <a href="/">Drivers &amp; teams</a>
+      <a href="/">Tracks</a>
+    </nav>
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>

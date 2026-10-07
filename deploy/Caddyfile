@@ -1,0 +1,6 @@
+# DOMAIN comes from deploy/.env (e.g. vroom-f1.duckdns.org).
+# Caddy obtains and renews the Let's Encrypt certificate automatically.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy app:8000
+}
