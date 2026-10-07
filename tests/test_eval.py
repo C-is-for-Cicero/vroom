@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from f1pred.eval.baselines import grid_baseline_rank
+from f1pred.eval.baselines import grid_baseline_rank, standings_baseline_rank
 from f1pred.eval.metrics import binary_log_loss, brier_score, spearman_order, top3_hit_rate
 from f1pred.eval.splits import walk_forward_by_race
 
@@ -41,6 +41,20 @@ def test_grid_baseline_pit_lane_starts_last():
     rank = grid_baseline_rank(race)
     assert rank["c"] == 4.0  # grid 0 = pit lane = ranked last
     assert rank["b"] == 1.0
+
+
+def test_standings_baseline_orders_by_points_then_prev_season():
+    race = pd.DataFrame(
+        {
+            "season_points_prior": [50.0, 80.0, 0.0, 0.0],
+            "prev_season_points": [200.0, 10.0, 90.0, 120.0],
+        },
+        index=list("abcd"),
+    )
+    rank = standings_baseline_rank(race)
+    # b leads on current points despite a's big previous season;
+    # c and d (no points yet) fall back to previous season order.
+    assert list(rank.sort_values().index) == ["b", "a", "d", "c"]
 
 
 def _race_df() -> pd.DataFrame:

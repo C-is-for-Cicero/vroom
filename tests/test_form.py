@@ -8,7 +8,7 @@ from f1pred.features.form import add_form_features
 def toy_core() -> pd.DataFrame:
     rows = []
     # one driver, one team, finishes 1,3,5 in rounds 1-3
-    for rnd, pos in [(1, 1), (2, 3), (3, 5)]:
+    for rnd, pos, pts in [(1, 1, 25.0), (2, 3, 15.0), (3, 5, 10.0)]:
         rows.append(
             {
                 "season": 2026,
@@ -19,6 +19,7 @@ def toy_core() -> pd.DataFrame:
                 "grid": pos + 1,
                 "dnf": False,
                 "classified": True,
+                "points": pts,
             }
         )
     return pd.DataFrame(rows)
@@ -47,3 +48,16 @@ def test_team_form_is_season_scoped_and_shifted():
 def test_experience_counts_prior_races():
     df = add_form_features(toy_core())
     assert list(df.sort_values("round")["driver_experience"]) == [0, 1, 2]
+
+
+def test_season_points_prior_is_shifted_and_prev_season_mapped():
+    df = toy_core()
+    prev = df.copy()
+    prev["season"] = 2025
+    out = add_form_features(pd.concat([prev, df], ignore_index=True))
+    cur = out[out.season == 2026].set_index("round")
+    assert cur.loc[1, "season_points_prior"] == 0.0  # nothing scored yet
+    assert cur.loc[2, "season_points_prior"] == 25.0
+    assert cur.loc[3, "season_points_prior"] == 40.0
+    assert (cur["prev_season_points"] == 50.0).all()  # 25+15+10 from 2025
+    assert (out[out.season == 2025]["prev_season_points"] == 0.0).all()

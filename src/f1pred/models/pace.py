@@ -32,6 +32,21 @@ POST_QUALI_FEATURES: list[str] = [
     "team_pace_form_3",
 ]
 
+# The primary product mode: everything here is known BEFORE qualifying
+# (leakage cutoff: end of the previous race; FP-based features join in
+# build-order steps 5/7). Trained as its own model instance — never the
+# post-quali model with a flag.
+PRE_QUALI_FEATURES: list[str] = [
+    "driver_form_finish",
+    "driver_form_vs_grid",
+    "driver_experience",
+    "team_season_finish",
+    "pace_form_3",
+    "team_pace_form_3",
+    "season_points_prior",
+    "prev_season_points",
+]
+
 SIGMA_FLOOR_S = 0.05
 
 _LGBM_PARAMS = {

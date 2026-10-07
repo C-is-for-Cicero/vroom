@@ -17,6 +17,7 @@ were made: by discussion, recorded here.
 
 | Decision | Choice | Notes |
 |---|---|---|
+| **Primary product mode** | **pre_quali** (clarified 2026-10-07) | The headline prediction is the finishing order guessed *before qualifying*. post_quali remains a separate model (per CLAUDE.md) shown once quali has run. Consequence: the pre-quali eval cannot use the grid baseline; its naive baseline is championship-standings order (previous season's order at round 1). The grid baseline stays as the post-quali bar. A first pre-quali model is pulled forward from build-order step 7; the full FP-based version (practice long runs, car profile) still lands with step 5/7. |
 | Primary objective | **Spearman rank correlation** of expected finishing order | The tie-breaker for hyperparameters and model-version selection on walk-forward eval. |
 | Log-loss role | **Hard guardrail + calibration** | A model version only ships if its win/podium/points log-loss beats the grid baseline on walk-forward eval. Displayed probabilities get post-hoc isotonic calibration, fitted walk-forward (no leakage). Spearman decides among models that pass the gate. |
 | Pace model target | **Pace delta in seconds** | Fuel/tyre-corrected lap-time delta to the field best, given the driver finishes. Sigma is interpretable (s/lap). Grid position enters as a feature weighted by track overtaking difficulty. |

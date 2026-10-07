@@ -68,4 +68,18 @@ def add_form_features(core: pd.DataFrame) -> pd.DataFrame:
         on=["season", "round", "team"],
         how="left",
     )
+
+    # Championship points accumulated BEFORE race R (race points only; good
+    # enough for form/baseline purposes), plus the previous season's total as
+    # the round-1 fallback. Both known before any session of race R.
+    df["season_points_prior"] = (
+        df.groupby(["season", "driver_id"], sort=False)["points"]
+        .transform(lambda s: s.shift(1).cumsum())
+        .fillna(0.0)
+    )
+    totals = df.groupby(["season", "driver_id"])["points"].sum().rename("prev_season_points")
+    totals = totals.reset_index()
+    totals["season"] += 1
+    df = df.merge(totals, on=["season", "driver_id"], how="left")
+    df["prev_season_points"] = df["prev_season_points"].fillna(0.0)
     return df.drop(columns=["_vs_grid"])

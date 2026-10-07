@@ -40,3 +40,34 @@ Reading:
 - Log-loss / Brier columns (and the shipping guardrail) start at step 3,
   when probabilities exist. Odds-baseline column joins when odds ingestion
   lands.
+
+## 2026-10-07 — pre_quali mode pulled forward (primary product mode)
+
+Clarified: the headline product is the PRE-qualifying prediction. First
+pre-quali model built from prior-race features only (form, past race pace,
+championship points — no FP data yet). Its baseline is championship-standings
+order; the grid does not exist before qualifying.
+
+`python -m f1pred.eval.pace_eval --mode both --min-train-races 30` — same
+dataset as above, 56 test races.
+
+| mode | model | Spearman ↑ | top-3 hit rate ↑ | pace RMSE ↓ |
+|---|---|---|---|---|
+| pre_quali | baseline_standings | **0.6828** | **0.5774** | — |
+| pre_quali | pace_model_pre_quali | 0.6653 | 0.5119 | 0.5702 |
+| post_quali | baseline_grid | **0.7474** | **0.6786** | — |
+| post_quali | pace_model_post_quali | 0.7359 | 0.6667 | 0.5130 |
+
+Reading:
+
+- The v1 pre-quali model trails the standings baseline. Expected: its
+  features are rolling aggregates of past results — nearly the same
+  information the championship table already summarises, with extra noise.
+  It has no within-weekend signal yet.
+- The known lever is FP data, which IS available before qualifying:
+  long-run pace, degradation and car profile from practice (build-order
+  step 5 features, feeding the step-7 pre-quali model). That is where the
+  pre-quali edge over the standings table has to come from, plus the
+  simulator (step 3) for order conversion and probabilities.
+- Per season, 2026 again narrows the gap (0.7251 vs 0.7237 Spearman): in
+  the reset season the standings table knows less.
