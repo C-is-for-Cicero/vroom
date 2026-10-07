@@ -59,7 +59,7 @@ def _fake_fp_laps() -> pd.DataFrame:
                     {
                         "Driver": driver,
                         "Stint": stint,
-                        "LapTime": pd.Timedelta(seconds=base + deg * life),
+                        "LapTime": pd.to_timedelta(base + deg * life, unit="s"),
                         "TyreLife": float(life),
                     }
                 )
