@@ -39,6 +39,7 @@ class RaceSimResult:
     p_podium: np.ndarray
     p_points: np.ndarray  # top 10
     exp_position: np.ndarray
+    ranks: np.ndarray | None = None  # (n_sims, n_drivers), 0 = winner; on request
 
 
 def simulate_race(
@@ -49,6 +50,7 @@ def simulate_race(
     grid_effect_s: float = 0.0,
     n_sims: int = N_SIMS_DEFAULT,
     seed: int = SIM_SEED_DEFAULT,
+    return_ranks: bool = False,
 ) -> RaceSimResult:
     """Simulate one race n_sims times.
 
@@ -87,6 +89,7 @@ def simulate_race(
         p_podium=pos_probs[:, :3].sum(axis=1),
         p_points=pos_probs[:, :10].sum(axis=1),
         exp_position=pos_probs @ positions,
+        ranks=ranks if return_ranks else None,
     )
 
 
