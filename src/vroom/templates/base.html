@@ -43,6 +43,14 @@
     }
     .muted { color: var(--muted); }
     .tag { color: var(--accent); font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    th, td { padding: 0.4rem 0.6rem; text-align: left; }
+    th { color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+    tbody tr:nth-child(odd) { background: rgba(255, 255, 255, 0.02); }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    a { color: #7ab7ff; }
+    .eval-log table { margin: 0.75rem 0; }
+    .eval-log td, .eval-log th { border-bottom: 1px solid var(--border); }
   </style>
 </head>
 <body>
@@ -50,10 +58,8 @@
     <h1>Vroom</h1>
     <nav>
       <a href="/">Race</a>
-      <a href="/">Championship</a>
-      <a href="/">Track record</a>
-      <a href="/">Drivers &amp; teams</a>
-      <a href="/">Tracks</a>
+      <a href="/championship">Championship</a>
+      <a href="/track-record">Track record</a>
     </nav>
   </header>
   <main>{% block content %}{% endblock %}</main>

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Championship — Vroom{% endblock %}
+{% block content %}
+<div class="panel">
+  <h2 style="margin-top:0">{{ meta.season }} title race
+    <span class="muted" style="font-weight:normal">{{ meta.rounds_simulated|length }}
+    rounds remaining, {{ meta.n_sims }} sims</span></h2>
+  <h3>Drivers</h3>
+  <table>
+    <thead><tr><th>driver</th><th class="num">points now</th>
+      <th class="num">exp. final</th><th class="num">P(title)</th></tr></thead>
+    <tbody>
+      {% for d in drivers[:10] %}
+      <tr><td><strong>{{ d.driver_id }}</strong></td>
+        <td class="num">{{ d.current_points }}</td>
+        <td class="num">{{ d.exp_final_points }}</td>
+        <td class="num">{{ '%.1f%%'|format(d.p_title * 100) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <h3>Constructors</h3>
+  <table>
+    <thead><tr><th>team</th><th class="num">points now</th>
+      <th class="num">exp. final</th><th class="num">P(title)</th></tr></thead>
+    <tbody>
+      {% for t in teams %}
+      <tr><td><strong>{{ t.team }}</strong></td>
+        <td class="num">{{ t.current_points }}</td>
+        <td class="num">{{ t.exp_final_points }}</td>
+        <td class="num">{{ '%.1f%%'|format(t.p_title * 100) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

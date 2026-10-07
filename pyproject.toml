@@ -27,6 +27,7 @@ web = [
     "python-multipart>=0.0.9",
     "itsdangerous>=2.1",
     "passlib[bcrypt]>=1.7",
+    "markdown>=3.5",
 ]
 dev = [
     "vroom[web]",

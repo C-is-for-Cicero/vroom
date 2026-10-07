@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ meta.race_name }} {{ meta.season }} — Vroom{% endblock %}
+{% block content %}
+<div class="panel">
+  <h2 style="margin-top:0">{{ meta.race_name }} {{ meta.season }}
+    <span class="muted" style="font-weight:normal">round {{ meta.round }}</span></h2>
+  <p class="muted">
+    {% for m in modes %}
+      {% if m == mode %}<strong class="tag">{{ m }}</strong>{% else %}
+      <a href="?mode={{ m }}">{{ m }}</a>{% endif %}{% if not loop.last %} · {% endif %}
+    {% endfor %}
+    — {{ meta.n_sims }} simulations, trained on {{ meta.trained_races }} races
+  </p>
+  <table>
+    <thead>
+      <tr><th></th><th>driver</th><th>team</th>
+        {% if mode == 'post_quali' %}<th class="num">grid</th>{% endif %}
+        <th class="num">win</th><th class="num">podium</th><th class="num">points</th>
+        <th class="num">DNF</th><th class="num">exp. pos</th></tr>
+    </thead>
+    <tbody>
+      {% for d in drivers %}
+      <tr>
+        <td class="muted">{{ loop.index }}</td>
+        <td><strong>{{ d.driver_code or d.driver_id }}</strong></td>
+        <td class="muted">{{ d.team }}</td>
+        {% if mode == 'post_quali' %}<td class="num">{{ d.grid }}</td>{% endif %}
+        <td class="num">{{ '%.1f%%'|format(d.p_win * 100) }}</td>
+        <td class="num">{{ '%.1f%%'|format(d.p_podium * 100) }}</td>
+        <td class="num">{{ '%.1f%%'|format(d.p_points * 100) }}</td>
+        <td class="num muted">{{ '%.0f%%'|format(d.p_dnf * 100) }}</td>
+        <td class="num">{{ d.exp_position }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="panel muted">
+  <p style="margin:0">Other rounds:
+    {% for p in all_predictions[:12] %}
+      <a href="/race/{{ p.season }}/{{ p.round }}">{{ p.season }} R{{ p.round }}</a>{% if not loop.last %} · {% endif %}
+    {% endfor %}
+  </p>
+</div>
+{% endblock %}
