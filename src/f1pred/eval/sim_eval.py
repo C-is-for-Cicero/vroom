@@ -37,6 +37,7 @@ from f1pred.eval.metrics import (
 )
 from f1pred.eval.pace_eval import load_dataset
 from f1pred.eval.splits import walk_forward_by_race
+from f1pred.features.track_fingerprint import grid_effect_scale
 from f1pred.models.dnf import DnfModel
 from f1pred.models.pace import POST_QUALI_FEATURES, PRE_QUALI_FEATURES, PaceModel
 from f1pred.sim.race_sim import fit_grid_effect, simulate_race
@@ -138,7 +139,7 @@ def evaluate_sim(
                 [mu_train[ix] for ix in per_race],
                 [grid_arr[ix] for ix in per_race],
                 [pos_arr[ix] for ix in per_race],
-            )
+            ) * grid_effect_scale(test, train)
 
         sim = simulate_race(
             mu, sigma, p_dnf, grid=grid, grid_effect_s=grid_effect,

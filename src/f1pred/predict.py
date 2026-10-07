@@ -25,8 +25,10 @@ import pandas as pd
 
 from f1pred.config import N_SIMS_DEFAULT, PROCESSED_DIR, SIM_SEED_DEFAULT, canonical_constructor
 from f1pred.features.base import time_str_to_seconds
+from f1pred.features.car_profile import load_fp_longrun
 from f1pred.features.form import add_form_features
 from f1pred.features.race_pace import load_race_pace
+from f1pred.features.track_fingerprint import add_track_features, grid_effect_scale
 from f1pred.ingest.jolpica import JolpicaClient
 from f1pred.models.dnf import DnfModel
 from f1pred.models.pace import (
@@ -158,8 +160,10 @@ def build_prediction_frame(season: int, round_number: int, mode: str) -> pd.Data
         )
 
     df = add_form_features(base)
-    pace = load_race_pace(sorted(df["season"].unique()))
-    df = df.merge(pace, on=["season", "round", "driver_code"], how="left")
+    df = add_track_features(df)
+    seasons = sorted(df["season"].unique())
+    df = df.merge(load_race_pace(seasons), on=["season", "round", "driver_code"], how="left")
+    df = df.merge(load_fp_longrun(seasons), on=["season", "round", "driver_code"], how="left")
     # the target race's own pace outcome must never be visible
     target_mask = (df["season"] == key[0]) & (df["round"] == key[1])
     df.loc[target_mask, "pace_delta_s"] = np.nan
@@ -195,7 +199,7 @@ def predict_round(
             [mu_train[ix] for ix in per_race],
             [grid_arr[ix] for ix in per_race],
             [pos_arr[ix] for ix in per_race],
-        )
+        ) * grid_effect_scale(test, train)
 
     sim = simulate_race(mu, sigma, p_dnf, grid=grid, grid_effect_s=grid_effect,
                         n_sims=n_sims, seed=seed)

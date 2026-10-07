@@ -25,6 +25,9 @@ def synthetic_dataset(n_races: int = 40, n_drivers: int = 10, seed: int = 1) -> 
                     "driver_form_vs_grid": 0.0,
                     "driver_experience": rnd,
                     "team_season_finish": d + 1.0,
+                    "fp_longrun_delta_s": np.nan,
+                    "fp_deg_slope": np.nan,
+                    "fp_consistency": np.nan,
                     "pace_delta_s": quali[d] * 0.8 + rng.normal(0, 0.1),
                 }
             )

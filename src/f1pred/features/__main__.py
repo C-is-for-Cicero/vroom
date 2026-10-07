@@ -12,6 +12,7 @@ import argparse
 from f1pred.config import CURRENT_SEASON, FIRST_DETAILED_SEASON, PROCESSED_DIR
 from f1pred.features.base import build_core_table
 from f1pred.features.form import add_form_features
+from f1pred.features.track_fingerprint import add_track_features
 
 
 def parse_seasons(spec: str) -> list[int]:
@@ -37,6 +38,7 @@ def main(argv: list[str] | None = None) -> int:
 
     core = build_core_table(seasons)
     core = add_form_features(core)
+    core = add_track_features(core)
     core.to_parquet(PROCESSED_DIR / "core.parquet", index=False)
     print(f"core.parquet: {len(core)} rows, seasons {seasons[0]}-{seasons[-1]}")
 

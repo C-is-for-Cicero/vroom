@@ -30,6 +30,9 @@ POST_QUALI_FEATURES: list[str] = [
     "team_season_finish",
     "pace_form_3",
     "team_pace_form_3",
+    "fp_longrun_delta_s",
+    "fp_deg_slope",
+    "fp_consistency",
 ]
 
 # The primary product mode: everything here is known BEFORE qualifying
@@ -45,6 +48,10 @@ PRE_QUALI_FEATURES: list[str] = [
     "team_pace_form_3",
     "season_points_prior",
     "prev_season_points",
+    # FP long runs happen before qualifying: the within-weekend signal
+    "fp_longrun_delta_s",
+    "fp_deg_slope",
+    "fp_consistency",
 ]
 
 SIGMA_FLOOR_S = 0.05

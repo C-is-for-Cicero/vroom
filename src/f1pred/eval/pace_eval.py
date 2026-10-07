@@ -45,10 +45,14 @@ MODES: dict[str, tuple[list[str], str, Callable[[pd.DataFrame], pd.Series]]] = {
 
 
 def load_dataset() -> pd.DataFrame:
-    """Core table + race-pace target, restricted to seasons with targets."""
+    """Core table + race-pace target + FP long runs, restricted to seasons
+    with targets."""
+    from f1pred.features.car_profile import load_fp_longrun
+
     core = pd.read_parquet(PROCESSED_DIR / "core.parquet")
-    pace = load_race_pace(sorted(core["season"].unique()))
-    df = core.merge(pace, on=["season", "round", "driver_code"], how="left")
+    seasons = sorted(core["season"].unique())
+    df = core.merge(load_race_pace(seasons), on=["season", "round", "driver_code"], how="left")
+    df = df.merge(load_fp_longrun(seasons), on=["season", "round", "driver_code"], how="left")
     df = add_pace_form_features(df)
     seasons_with_target = sorted(df.loc[df["pace_delta_s"].notna(), "season"].unique())
     return df[df["season"].isin(seasons_with_target)].reset_index(drop=True)
