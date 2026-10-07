@@ -22,7 +22,7 @@ were made: by discussion, recorded here.
 | Log-loss role | **Hard guardrail + calibration** | A model version only ships if its win/podium/points log-loss beats the grid baseline on walk-forward eval. Displayed probabilities get post-hoc isotonic calibration, fitted walk-forward (no leakage). Spearman decides among models that pass the gate. |
 | Pace model target | **Pace delta in seconds** | Fuel/tyre-corrected lap-time delta to the field best, given the driver finishes. Sigma is interpretable (s/lap). Grid position enters as a feature weighted by track overtaking difficulty. |
 | Training window | **2018+ full detail** | FastF1 telemetry era for all features. Pre-2018 Jolpica results used only for long-horizon priors (track DNF/SC rates, driver experience). 2026 reset handling per `CLAUDE.md`. |
-| Odds baseline | **Free odds API** (The Odds API or similar) | Pre-race win/podium markets pulled automatically where covered; implied probabilities (overround-corrected) as an eval baseline column. Needs `ODDS_API_KEY`. Not in the critical path of the model pipeline. |
+| Odds baseline | **Free odds API** (The Odds API or similar) | Pre-race win/podium markets pulled automatically where covered; implied probabilities (overround-corrected) as an eval baseline column. Needs `ODDS_API_KEY`. Not in the critical path of the model pipeline. **2026-10-07 live check: The Odds API has NO Formula 1 (or any motorsport) coverage — verified against its live /v4/sports catalog; F1 is an open feature request on their tracker. The integration code and key both work; the baseline stays dormant until they add F1 or we pick a provider that has it (new data source = ask first, per CLAUDE.md).** |
 
 ## Infrastructure
 
