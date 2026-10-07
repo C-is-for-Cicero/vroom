@@ -13,6 +13,7 @@ def toy_core() -> pd.DataFrame:
             {
                 "season": 2026,
                 "round": rnd,
+                "circuit_id": f"track{rnd}",
                 "driver_id": "a",
                 "team": "red_bull",
                 "position": pos,

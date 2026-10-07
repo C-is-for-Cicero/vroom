@@ -82,4 +82,27 @@ def add_form_features(core: pd.DataFrame) -> pd.DataFrame:
     totals["season"] += 1
     df = df.merge(totals, on=["season", "driver_id"], how="left")
     df["prev_season_points"] = df["prev_season_points"].fillna(0.0)
+
+    # DNF-related rates for the DNF model. Car reliability belongs to the
+    # team; rolling over the team's last 20 car-races (~10 weekends).
+    df["team_dnf_rate"] = df.groupby("team", sort=False)["dnf"].transform(
+        lambda s: s.astype(float).shift(1).rolling(20, min_periods=5).mean()
+    )
+    # Circuit chaos level: expanding mean of the share of the field that
+    # DNF'd at this circuit in past races (strictly before race R).
+    race_dnf = (
+        df.groupby(["season", "round", "circuit_id"], sort=False)["dnf"]
+        .mean()
+        .rename("race_dnf_share")
+        .reset_index()
+        .sort_values(["season", "round"], kind="stable")
+    )
+    race_dnf["circuit_dnf_rate"] = race_dnf.groupby("circuit_id", sort=False)[
+        "race_dnf_share"
+    ].transform(lambda s: s.shift(1).expanding(min_periods=1).mean())
+    df = df.merge(
+        race_dnf[["season", "round", "circuit_id", "circuit_dnf_rate"]],
+        on=["season", "round", "circuit_id"],
+        how="left",
+    )
     return df.drop(columns=["_vs_grid"])

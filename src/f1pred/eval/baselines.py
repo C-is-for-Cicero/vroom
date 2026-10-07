@@ -33,3 +33,42 @@ def standings_baseline_rank(race_df: pd.DataFrame) -> pd.Series:
     """
     score = race_df["season_points_prior"] * 10_000 + race_df["prev_season_points"]
     return (-score).rank(method="first")
+
+
+def rank_outcome_probs(train: pd.DataFrame, rank: pd.Series) -> pd.DataFrame:
+    """Historical P(win / podium / points | predicted rank), Laplace-smoothed.
+
+    This turns a deterministic baseline ordering into probabilities, so the
+    baselines can be scored on log-loss like the model. Inputs: training rows
+    with the position column, and that baseline's rank per row (grid or
+    standings order). Output: frame indexed by integer rank with columns
+    p_win, p_podium, p_points. Leakage: pass training races only.
+    """
+    df = pd.DataFrame(
+        {
+            "rank": rank.round().astype(int),
+            "win": (train["position"] == 1).astype(float),
+            "podium": (train["position"] <= 3).astype(float),
+            "points": (train["position"] <= 10).astype(float),
+        }
+    )
+    grouped = df.groupby("rank").agg(n=("win", "size"), w=("win", "sum"),
+                                     p=("podium", "sum"), t=("points", "sum"))
+    out = pd.DataFrame(
+        {
+            "p_win": (grouped["w"] + 1) / (grouped["n"] + 2),
+            "p_podium": (grouped["p"] + 1) / (grouped["n"] + 2),
+            "p_points": (grouped["t"] + 1) / (grouped["n"] + 2),
+        }
+    )
+    return out
+
+
+def apply_rank_probs(probs: pd.DataFrame, rank: pd.Series) -> pd.DataFrame:
+    """Look up rank_outcome_probs for a test race's ranks; unseen ranks fall
+    back to the worst (last) row of the table."""
+    idx = rank.round().astype(int).clip(upper=int(probs.index.max()))
+    idx = idx.clip(lower=int(probs.index.min()))
+    out = probs.reindex(idx.values)
+    out.index = rank.index
+    return out

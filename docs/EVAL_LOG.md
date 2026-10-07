@@ -71,3 +71,44 @@ Reading:
   simulator (step 3) for order conversion and probabilities.
 - Per season, 2026 again narrows the gap (0.7251 vs 0.7237 Spearman): in
   the reset season the standings table knows less.
+
+## 2026-10-07 — step 3: DNF model + race simulator (first probabilities)
+
+`python -m f1pred.eval.sim_eval --mode both --min-train-races 30` — 10,000
+sims/race, 56 test races; isotonic calibration fitted walk-forward on the
+model's own out-of-sample predictions (first 10 races stay raw). Baseline
+orderings are converted to probabilities via train-race frequencies per rank
+(Laplace-smoothed), so both sides score on log-loss fairly.
+
+pre_quali (primary mode; baseline = standings order):
+
+| model | Spearman | top-3 | ll win | ll podium | ll points |
+|---|---|---|---|---|---|
+| baseline_standings | **0.6828** | **0.5774** | 0.1649 | **0.2849** | **0.5515** |
+| sim_pre_quali_calibrated | 0.6587 | 0.4940 | **0.1452** | 0.2918 | 0.5869 |
+
+post_quali (baseline = grid order):
+
+| model | Spearman | top-3 | ll win | ll podium | ll points |
+|---|---|---|---|---|---|
+| baseline_grid | 0.7474 | **0.6786** | 0.1184 | **0.2319** | **0.4967** |
+| sim_post_quali_calibrated | **0.7518** | 0.6369 | **0.1085** | 0.2463 | 0.5505 |
+
+Guardrail status (ship only if win/podium/points log-loss all beat the
+baseline): **not passed yet** — win passes in both modes, podium is close,
+points fails. Calibration already cuts points log-loss sharply
+(post: 0.721 raw → 0.551).
+
+Reading:
+
+- First baseline win on the primary order metric: the post-quali simulator
+  (pace + fitted grid-effect + DNFs) beats the grid baseline on Spearman —
+  the conversion layer works.
+- Both modes already predict the WINNER better than their baselines
+  (win log-loss and Brier) — pace knowledge is sharpest at the front.
+- Points-finish probabilities are the weak spot. Suspected causes: sigma
+  underestimation in the midfield (trained on in-sample absolute
+  residuals), independent DNF draws (no safety-car correlation), and random
+  ordering among DNFs. These are the step-3 refinement targets, alongside
+  per-track overtaking difficulty (step 5) replacing the single fitted
+  grid-effect scalar.
