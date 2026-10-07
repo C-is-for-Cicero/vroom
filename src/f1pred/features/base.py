@@ -55,8 +55,11 @@ def results_frame(seasons: list[int], client: JolpicaClient | None = None) -> pd
             for res in race.get("Results", []):
                 position_text = res["positionText"]
                 classified = position_text.isdigit()
+                fl_rank = res.get("FastestLap", {}).get("rank")
                 rows.append(
                     {
+                        "fastest_lap_rank": int(fl_rank) if fl_rank else None,
+                        "is_fastest_lap": fl_rank == "1",
                         "season": season,
                         "round": int(race["round"]),
                         "circuit_id": race["Circuit"]["circuitId"],

@@ -183,3 +183,22 @@ currently should use raw. Flagged for decision.
 Trade-off: post-quali Spearman slipped from 0.7518 to 0.7454 (wider sigma
 flattens expected-position differences). Net: probability quality bought
 at a small order-metric cost; the probability metrics are the product.
+
+## 2026-10-07 — step 6: fastest-lap classifier
+
+Multinomial-over-the-field via per-race normalised binary LightGBM
+(post-quali features). `python -m f1pred.eval.fastest_lap_eval
+--min-train-races 30`, 56 test races:
+
+| model | log-loss ↓ | hit@1 | hit@3 |
+|---|---|---|---|
+| uniform (1/n) | 3.0220 | 0.3393 | 0.3750 |
+| grid-frequency baseline | 2.6284 | **0.3036** | **0.5179** |
+| fastest-lap model (pure) | 3.0742 | 0.2679 | 0.5000 |
+| **fastest-lap blend (0.5 model + 0.5 grid-freq, fixed a priori)** | **2.4558** | 0.2857 | 0.4821 |
+
+The pure classifier is overconfident and loses to the frequency baseline;
+the fixed 50/50 ensemble with that prior beats it on log-loss. The blend
+is the shipping candidate for the fastest-lap market. Fastest lap is
+intrinsically noisy (no bonus point since 2025, often set on a late free
+pit stop) — hit@1 ≈ 0.30 against 20 drivers is the realistic ceiling area.
