@@ -36,8 +36,8 @@ def load_dataset() -> pd.DataFrame:
     return df[df["season"].isin(seasons_with_target)].reset_index(drop=True)
 
 
-def evaluate(df: pd.DataFrame, min_train_races: int = 60, seed: int = 0) -> pd.DataFrame:
-    """Run the walk-forward loop; returns the per-model summary table."""
+def evaluate(df: pd.DataFrame, min_train_races: int = 60, seed: int = 0) -> list[dict]:
+    """Run the walk-forward loop; returns per-race metric rows."""
     rows: list[dict] = []
     for train_idx, test_idx, (season, rnd) in walk_forward_by_race(df, min_train_races):
         train, test = df.loc[train_idx], df.loc[test_idx]
@@ -73,7 +73,7 @@ def evaluate(df: pd.DataFrame, min_train_races: int = 60, seed: int = 0) -> pd.D
                 "pace_rmse_s": float("nan"),
             }
         )
-    return per_race_summary(rows)
+    return rows
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -86,8 +86,17 @@ def main(argv: list[str] | None = None) -> int:
     n_target = int(df["pace_delta_s"].notna().sum())
     races = df.loc[df["pace_delta_s"].notna(), ["season", "round"]].drop_duplicates()
     print(f"dataset: {len(df)} rows, {n_target} with pace target over {len(races)} races\n")
-    summary = evaluate(df, min_train_races=args.min_train_races, seed=args.seed)
-    print(summary.to_string(index=False, float_format=lambda v: f"{v:.4f}"))
+    rows = evaluate(df, min_train_races=args.min_train_races, seed=args.seed)
+    fmt = lambda v: f"{v:.4f}"  # noqa: E731
+    print(per_race_summary(rows).to_string(index=False, float_format=fmt))
+    print("\nby season:")
+    per_season = (
+        pd.DataFrame(rows)
+        .groupby(["season", "model"])[["spearman", "top3_hit_rate", "pace_rmse_s"]]
+        .mean()
+        .reset_index()
+    )
+    print(per_season.to_string(index=False, float_format=fmt))
     return 0
 
 
