@@ -37,7 +37,7 @@ from f1pred.models.pace import (
     PaceModel,
     add_pace_form_features,
 )
-from f1pred.sim.race_sim import fit_grid_effect, simulate_race
+from f1pred.sim.race_sim import estimate_dnf_frailty, fit_grid_effect, simulate_race
 
 PREDICTIONS_DIR = PROCESSED_DIR / "predictions"
 
@@ -201,8 +201,11 @@ def predict_round(
             [pos_arr[ix] for ix in per_race],
         ) * grid_effect_scale(test, train)
 
+    frailty = estimate_dnf_frailty(
+        train.groupby(["season", "round"], sort=False)["dnf"].sum().to_numpy()
+    )
     sim = simulate_race(mu, sigma, p_dnf, grid=grid, grid_effect_s=grid_effect,
-                        n_sims=n_sims, seed=seed)
+                        dnf_frailty_var=frailty, n_sims=n_sims, seed=seed)
     out = pd.DataFrame(
         {
             "driver_id": test["driver_id"].values,

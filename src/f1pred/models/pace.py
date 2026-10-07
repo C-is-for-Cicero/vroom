@@ -100,27 +100,61 @@ def add_pace_form_features(df: pd.DataFrame) -> pd.DataFrame:
 class PaceModel:
     """Mean + sigma pace model (post_quali mode)."""
 
-    def __init__(self, features: list[str] | None = None, seed: int = 0) -> None:
+    def __init__(
+        self, features: list[str] | None = None, seed: int = 0, sigma_folds: int = 4
+    ) -> None:
         self.features = features if features is not None else list(POST_QUALI_FEATURES)
+        self._seed = seed
+        self._sigma_folds = sigma_folds
+        self._sigma_fitted = False
         self._mean = LGBMRegressor(random_state=seed, **_LGBM_PARAMS)
         self._sigma = LGBMRegressor(random_state=seed, **_LGBM_PARAMS)
 
     def fit(self, train: pd.DataFrame) -> PaceModel:
         """Fit on rows where the target exists (finishers with clean laps).
 
-        Input: frame with self.features and pace_delta_s. Output: self.
+        The sigma model trains on OUT-OF-FOLD absolute residuals from
+        time-ordered folds (never residuals the mean model was fitted on),
+        scaled by sqrt(pi/2) (E|N(0,s)| = s*sqrt(2/pi)), so sigma is an
+        honest estimate of predictive, not in-sample, error.
+
+        Input: frame with self.features, pace_delta_s, season, round.
         """
-        rows = train[train["pace_delta_s"].notna()]
+        rows = train[train["pace_delta_s"].notna()].sort_values(
+            ["season", "round"], kind="stable"
+        )
         x = rows[self.features]
         y = rows["pace_delta_s"]
         self._mean.fit(x, y)
-        resid = np.abs(y - self._mean.predict(x))
-        self._sigma.fit(x, resid)
+
+        races = rows[["season", "round"]].drop_duplicates().itertuples(index=False, name=None)
+        races = list(races)
+        keys = pd.Series(list(zip(rows["season"], rows["round"], strict=True)), index=rows.index)
+        oof_x, oof_resid = [], []
+        bounds = np.linspace(0, len(races), self._sigma_folds + 1).astype(int)
+        for k in range(1, self._sigma_folds):
+            fit_races = set(races[: bounds[k]])
+            val_races = set(races[bounds[k] : bounds[k + 1]])
+            fit_mask = keys.isin(fit_races)
+            val_mask = keys.isin(val_races)
+            if fit_mask.sum() < 50 or val_mask.sum() == 0:
+                continue
+            fold_model = LGBMRegressor(random_state=self._seed, **_LGBM_PARAMS)
+            fold_model.fit(x[fit_mask], y[fit_mask])
+            oof_x.append(x[val_mask])
+            oof_resid.append(np.abs(y[val_mask] - fold_model.predict(x[val_mask])))
+        if oof_x:
+            self._sigma.fit(pd.concat(oof_x), np.concatenate(oof_resid))
+            self._sigma_fitted = True
+        else:  # tiny training set: fall back to in-sample residuals
+            self._sigma.fit(x, np.abs(y - self._mean.predict(x)))
+            self._sigma_fitted = True
         return self
 
     def predict(self, df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
         """Predict (mu, sigma) in s/lap for each row; sigma floored."""
         x = df[self.features]
         mu = self._mean.predict(x)
-        sigma = np.maximum(self._sigma.predict(x), SIGMA_FLOOR_S)
-        return mu, sigma
+        # abs-residual -> Gaussian sigma: E|N(0,s)| = s*sqrt(2/pi)
+        sigma = self._sigma.predict(x) * np.sqrt(np.pi / 2)
+        return mu, np.maximum(sigma, SIGMA_FLOOR_S)

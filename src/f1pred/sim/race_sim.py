@@ -48,6 +48,7 @@ def simulate_race(
     p_dnf: np.ndarray,
     grid: np.ndarray | None = None,
     grid_effect_s: float = 0.0,
+    dnf_frailty_var: float = 0.0,
     n_sims: int = N_SIMS_DEFAULT,
     seed: int = SIM_SEED_DEFAULT,
     return_ranks: bool = False,
@@ -71,7 +72,17 @@ def simulate_race(
         slots[slots == 0] = n  # pit-lane start treated as back of the field
         score = score + grid_effect_s * slots[None, :]
 
-    dnf = rng.random((n_sims, n)) < p_dnf[None, :]
+    if dnf_frailty_var > 0:
+        # Correlated retirements: a per-sim chaos multiplier m (gamma,
+        # mean 1, variance dnf_frailty_var) scales every driver's DNF
+        # hazard, so messy races take out several cars together. Survival
+        # under a scaled hazard is (1-p)^m, which keeps probabilities valid
+        # and preserves each driver's marginal P(DNF) to first order.
+        m = rng.gamma(1.0 / dnf_frailty_var, dnf_frailty_var, (n_sims, 1))
+        p_eff = 1.0 - np.power(1.0 - p_dnf[None, :], m)
+    else:
+        p_eff = p_dnf[None, :]
+    dnf = rng.random((n_sims, n)) < p_eff
     score = np.where(dnf, _DNF_SCORE_OFFSET + rng.random((n_sims, n)), score)
 
     # rank per driver within each sim: 0 = winner
@@ -91,6 +102,22 @@ def simulate_race(
         exp_position=pos_probs @ positions,
         ranks=ranks if return_ranks else None,
     )
+
+
+def estimate_dnf_frailty(dnf_counts: np.ndarray) -> float:
+    """Frailty variance from the overdispersion of per-race DNF counts.
+
+    Independent DNFs make counts roughly Poisson (variance ≈ mean); real
+    seasons are overdispersed because incidents correlate. Moment match:
+    Var(N) ≈ mean + v * mean², so v = (Var - mean) / mean². Clipped to
+    [0, 2]. Leakage: callers pass training races only.
+    """
+    counts = np.asarray(dnf_counts, dtype=float)
+    mean = counts.mean()
+    if len(counts) < 10 or mean <= 0:
+        return 0.0
+    v = (counts.var() - mean) / mean**2
+    return float(min(max(v, 0.0), 2.0))
 
 
 def fit_grid_effect(

@@ -152,3 +152,34 @@ Reading:
   known mechanisms not yet modelled: correlated retirements (safety-car
   chaos hits several cars at once) and midfield sigma underestimation
   (sigma trains on in-sample residuals). Next modelling targets.
+
+## 2026-10-07 — honest sigma (OOF) + correlated DNFs (gamma frailty)
+
+Sigma now trains on out-of-fold absolute residuals from time-ordered folds
+with the half-normal correction; the simulator draws a per-sim chaos
+multiplier (gamma, variance moment-matched to training DNF-count
+overdispersion), so retirements correlate within a race.
+
+`sim_eval --mode both --min-train-races 30`, same 56 test races (raw sim
+rows; calibrated in parentheses where different):
+
+| mode | model | Spearman | ll win | ll podium | ll points |
+|---|---|---|---|---|---|
+| pre_quali | baseline_standings | **0.6828** | 0.1649 | 0.2849 | **0.5515** |
+| pre_quali | sim raw | 0.6626 | **0.1405** | **0.2741** | 0.5525 |
+| post_quali | baseline_grid | **0.7474** | 0.1184 | **0.2319** | **0.4967** |
+| post_quali | sim raw | 0.7454 | **0.1122** | 0.2381 | 0.5108 |
+
+Guardrail: pre_quali now passes win AND podium and ties points (Δ 0.001);
+post_quali passes win, misses podium by 0.006 and points by 0.014. Points
+log-loss improved dramatically (pre raw: 0.743 → 0.553; post: 0.778 → 0.511).
+
+Note on calibration: with honest sigma + frailty, the RAW simulator is
+already well calibrated and isotonic now mostly degrades log-loss (it
+overfits limited history). Proposal: make calibration adaptive — apply it
+only where it improved walk-forward log-loss on past races; display layer
+currently should use raw. Flagged for decision.
+
+Trade-off: post-quali Spearman slipped from 0.7518 to 0.7454 (wider sigma
+flattens expected-position differences). Net: probability quality bought
+at a small order-metric cost; the probability metrics are the product.

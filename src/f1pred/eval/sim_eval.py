@@ -40,7 +40,7 @@ from f1pred.eval.splits import walk_forward_by_race
 from f1pred.features.track_fingerprint import grid_effect_scale
 from f1pred.models.dnf import DnfModel
 from f1pred.models.pace import POST_QUALI_FEATURES, PRE_QUALI_FEATURES, PaceModel
-from f1pred.sim.race_sim import fit_grid_effect, simulate_race
+from f1pred.sim.race_sim import estimate_dnf_frailty, fit_grid_effect, simulate_race
 
 MODES: dict[str, tuple[list[str], str, Callable[[pd.DataFrame], pd.Series]]] = {
     "pre_quali": (PRE_QUALI_FEATURES, "baseline_standings", standings_baseline_rank),
@@ -141,9 +141,12 @@ def evaluate_sim(
                 [pos_arr[ix] for ix in per_race],
             ) * grid_effect_scale(test, train)
 
+        frailty = estimate_dnf_frailty(
+            train.groupby(["season", "round"], sort=False)["dnf"].sum().to_numpy()
+        )
         sim = simulate_race(
             mu, sigma, p_dnf, grid=grid, grid_effect_s=grid_effect,
-            n_sims=n_sims, seed=seed * 100_003 + i,
+            dnf_frailty_var=frailty, n_sims=n_sims, seed=seed * 100_003 + i,
         )
         y = _outcomes(test)
         actual = test["position"].astype(float)
