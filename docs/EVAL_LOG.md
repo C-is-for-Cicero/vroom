@@ -112,3 +112,43 @@ Reading:
   ordering among DNFs. These are the step-3 refinement targets, alongside
   per-track overtaking difficulty (step 5) replacing the single fitted
   grid-effect scalar.
+
+## 2026-10-07 — step 5 v1: FP long-run car profile + per-track grid effect
+
+FP long-run features (best-stint pace delta, degradation slope,
+consistency from FP2/FP3/FP1) for 85/86 weekends; simulator grid-effect
+weight now scaled per circuit by circuit_grid_hold. Same 56 test races.
+
+Pace model (`pace_eval --mode both --min-train-races 30`):
+
+| mode | model | Spearman | top-3 | RMSE |
+|---|---|---|---|---|
+| pre_quali | baseline_standings | **0.6828** | **0.5774** | — |
+| pre_quali | pace_model (now with FP) | 0.6718 (was 0.6653) | 0.5357 (was 0.5119) | 0.5703 |
+| post_quali | baseline_grid | **0.7474** | **0.6786** | — |
+| post_quali | pace_model (now with FP) | 0.7363 | 0.6548 | 0.5187 |
+
+Simulator (`sim_eval --mode both --min-train-races 30`), calibrated:
+
+| mode | model | Spearman | ll win | ll podium | ll points |
+|---|---|---|---|---|---|
+| pre_quali | baseline_standings | **0.6828** | 0.1649 | **0.2849** | **0.5515** |
+| pre_quali | sim calibrated | 0.6652 | **0.1487** | 0.2991 | 0.6020 |
+| post_quali | baseline_grid | 0.7474 | 0.1184 | 0.2319 | **0.4967** |
+| post_quali | sim calibrated | **0.7505** | **0.1153** | **0.2292** | 0.5665 |
+
+Guardrail status: post_quali now passes **win and podium** (podium for the
+first time); points still fails in both modes. pre_quali passes win only.
+
+Reading:
+
+- FP long runs are real signal: pre-quali Spearman gap to the standings
+  baseline narrowed (0.0175 → 0.0110) and top-3 jumped (+0.024), from
+  within-weekend data alone, with 2025 now won outright. More FP signal is
+  available (telemetry corner profile, step 5 full) — this was lap times only.
+- The per-track grid effect + FP features keep the post-quali sim ahead on
+  Spearman and pushed podium log-loss past the baseline.
+- Points-finish probabilities remain the open guardrail item. The two
+  known mechanisms not yet modelled: correlated retirements (safety-car
+  chaos hits several cars at once) and midfield sigma underestimation
+  (sigma trains on in-sample residuals). Next modelling targets.
