@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Register — Vroom{% endblock %}
+{% block content %}
+<div class="panel" style="max-width: 22rem; margin: 3rem auto;">
+  <h2 style="margin-top:0">Create account</h2>
+  {% if error %}<p class="tag">{{ error }}</p>{% endif %}
+  <form method="post" action="/register">
+    <p><input name="invite" placeholder="invite code" required autofocus></p>
+    <p><input name="username" placeholder="username" required></p>
+    <p><input name="password" type="password" placeholder="password (8+ chars)" required></p>
+    <p><button type="submit">Register</button></p>
+  </form>
+  <p class="muted">Already registered? <a href="/login">Log in</a>.</p>
+</div>
+{% endblock %}

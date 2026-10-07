@@ -51,6 +51,13 @@
     a { color: #7ab7ff; }
     .eval-log table { margin: 0.75rem 0; }
     .eval-log td, .eval-log th { border-bottom: 1px solid var(--border); }
+    input, button {
+      width: 100%; padding: 0.5rem 0.65rem; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text);
+      font-size: 1rem;
+    }
+    button { background: var(--accent); border: none; color: white;
+             font-weight: 600; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -61,6 +68,11 @@
       <a href="/championship">Championship</a>
       <a href="/track-record">Track record</a>
     </nav>
+    {% set u = request.scope.get("state", {}).get("user") %}
+    {% if u %}
+    <span class="muted" style="margin-left:auto">{{ u.username }}
+      · <a href="/logout">log out</a></span>
+    {% endif %}
   </header>
   <main>{% block content %}{% endblock %}</main>
 </body>

@@ -12,6 +12,20 @@ docker compose up -d --build
 Caddy terminates HTTPS for `$DOMAIN` automatically. The app serves on
 `app:8000` inside the compose network only.
 
+## Accounts (invite-only)
+
+The whole site requires login. Create the first (admin) user and mint
+invite codes for friends from inside the app container:
+
+```bash
+docker compose exec app python -m vroom.manage create-admin <you>
+docker compose exec app python -m vroom.manage invite -n 5
+```
+
+Hand each friend one code; they register at `https://$DOMAIN/register`.
+Each code works once. The user database lives in the `f1-data` volume
+(`/data/vroom.sqlite`) — back it up by copying the file.
+
 ## Scheduled refresh
 
 Model data lives in the `f1-data` volume (`/data` in the app container).

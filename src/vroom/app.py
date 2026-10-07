@@ -15,14 +15,25 @@ on the public domain.
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select
 
 from f1pred.config import PROCESSED_DIR, REPO_ROOT
+from vroom.auth import (
+    SESSION_COOKIE,
+    SESSION_MAX_AGE_S,
+    hash_password,
+    make_session_token,
+    user_from_token,
+    verify_password,
+)
+from vroom.db import InviteCode, User, db_session, utcnow
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 PREDICTIONS_DIR = PROCESSED_DIR / "predictions"
@@ -32,6 +43,105 @@ _PRED_FILE = re.compile(r"^(\d{4})_(\d{2})_(pre_quali|post_quali)\.json$")
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app = FastAPI(title="Vroom", docs_url=None, redoc_url=None)
+
+# ---------------------------------------------------------------------------
+# Auth: the whole site is invite-only; login gates everything but these.
+# ---------------------------------------------------------------------------
+
+PUBLIC_PATHS = {"/login", "/register", "/health"}
+MIN_PASSWORD_LEN = 8
+
+
+def _cookie_kwargs() -> dict:
+    return {
+        "httponly": True,
+        "samesite": "lax",
+        "max_age": SESSION_MAX_AGE_S,
+        # VROOM_COOKIE_SECURE=1 in deploy/.env (HTTPS via Caddy); off for dev
+        "secure": os.environ.get("VROOM_COOKIE_SECURE", "0") == "1",
+    }
+
+
+def _safe_next(target: str | None) -> str:
+    return target if target and target.startswith("/") and not target.startswith("//") else "/"
+
+
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    if request.url.path in PUBLIC_PATHS:
+        return await call_next(request)
+    user = user_from_token(request.cookies.get(SESSION_COOKIE))
+    if user is None:
+        return RedirectResponse(f"/login?next={request.url.path}", status_code=303)
+    request.state.user = user
+    return await call_next(request)
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_form(request: Request, next: str = "/", error: str | None = None):
+    return templates.TemplateResponse(
+        request, "login.html", {"next": _safe_next(next), "error": error}
+    )
+
+
+@app.post("/login")
+def login(request: Request, username: str = Form(...), password: str = Form(...),
+          next: str = Form("/")):
+    with db_session() as session:
+        user = session.scalar(select(User).where(User.username == username.strip()))
+    if user is None or not verify_password(password, user.password_hash):
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {"next": _safe_next(next), "error": "wrong username or password"},
+            status_code=401,
+        )
+    response = RedirectResponse(_safe_next(next), status_code=303)
+    response.set_cookie(SESSION_COOKIE, make_session_token(user.id), **_cookie_kwargs())
+    return response
+
+
+@app.get("/register", response_class=HTMLResponse)
+def register_form(request: Request, error: str | None = None):
+    return templates.TemplateResponse(request, "register.html", {"error": error})
+
+
+@app.post("/register")
+def register(request: Request, invite: str = Form(...), username: str = Form(...),
+             password: str = Form(...)):
+    def fail(message: str, code: int = 400):
+        return templates.TemplateResponse(
+            request, "register.html", {"error": message}, status_code=code
+        )
+
+    username = username.strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{2,32}", username):
+        return fail("username: 2-32 letters, digits, _ . -")
+    if len(password) < MIN_PASSWORD_LEN:
+        return fail(f"password must be at least {MIN_PASSWORD_LEN} characters")
+    with db_session() as session:
+        code = session.get(InviteCode, invite.strip())
+        if code is None or code.used_by is not None:
+            return fail("invalid or already-used invite code", 403)
+        if session.scalar(select(User).where(User.username == username)):
+            return fail("username already taken")
+        user = User(username=username, password_hash=hash_password(password))
+        session.add(user)
+        session.flush()
+        code.used_by = user.id
+        code.used_at = utcnow()
+        session.commit()
+        user_id = user.id
+    response = RedirectResponse("/", status_code=303)
+    response.set_cookie(SESSION_COOKIE, make_session_token(user_id), **_cookie_kwargs())
+    return response
+
+
+@app.get("/logout")
+def logout():
+    response = RedirectResponse("/login", status_code=303)
+    response.delete_cookie(SESSION_COOKIE)
+    return response
 
 
 def _prediction_index() -> list[dict]:
