@@ -67,6 +67,10 @@ def results_frame(seasons: list[int], client: JolpicaClient | None = None) -> pd
                         "date": race["date"],
                         "driver_id": res["Driver"]["driverId"],
                         "driver_code": res["Driver"].get("code"),
+                        "driver_name": (
+                            f"{res['Driver'].get('givenName', '')} "
+                            f"{res['Driver'].get('familyName', '')}".strip()
+                        ),
                         "constructor_id": res["Constructor"]["constructorId"],
                         "team": canonical_constructor(res["Constructor"]["constructorId"]),
                         "grid": int(res["grid"]),  # 0 = pit-lane start

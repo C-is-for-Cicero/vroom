@@ -102,15 +102,48 @@ def _calibrated_rows(records: list[dict], mode: str) -> list[dict]:
     return rows
 
 
+def _odds_rows(odds: pd.DataFrame | None, test: pd.DataFrame, y: dict, season, rnd) -> list[dict]:
+    """Bookmaker-implied win baseline for one race, where a pre-race
+    snapshot exists. Drivers missing from the market share the leftover
+    probability mass equally."""
+    if odds is None or odds.empty:
+        return []
+    o = odds[(odds["season"] == season) & (odds["round"] == rnd)]
+    if len(o) < 10:
+        return []
+    p = test[["driver_id"]].merge(o[["driver_id", "p_win_odds"]], on="driver_id", how="left")[
+        "p_win_odds"
+    ].to_numpy()
+    missing = np.isnan(p)
+    leftover = max(1.0 - np.nansum(p), 0.0)
+    p[missing] = leftover / missing.sum() if missing.any() else 0.0
+    p = np.clip(p / p.sum(), 1e-6, 1 - 1e-6)
+    odds_rank = pd.Series(-p, index=test.index).rank(method="first")
+    actual = test["position"].astype(float)
+    return [
+        {
+            "model": "baseline_odds",
+            "season": season,
+            "round": rnd,
+            "spearman": spearman_order(odds_rank, actual),
+            "top3_hit_rate": top3_hit_rate(odds_rank, actual),
+            "ll_win": binary_log_loss(y["win"], p),
+            "brier_win": brier_score(y["win"], p),
+        }
+    ]
+
+
 def evaluate_sim(
     df: pd.DataFrame,
     mode: str,
     min_train_races: int = 30,
     seed: int = 0,
     n_sims: int = 10_000,
+    odds: pd.DataFrame | None = None,
 ) -> list[dict]:
     """Walk-forward loop; returns per-race metric rows for the raw and
-    calibrated simulator and the baseline."""
+    calibrated simulator, the mode's baseline, and (where snapshots
+    exist) the bookmaker odds baseline."""
     features, baseline_name, baseline_rank = MODES[mode]
     rows: list[dict] = []
     records: list[dict] = []
@@ -199,6 +232,7 @@ def evaluate_sim(
                 ),
             }
         )
+        rows.extend(_odds_rows(odds, test, y, season, rnd))
     rows.extend(_calibrated_rows(records, mode))
     return rows
 
@@ -211,11 +245,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)
 
+    from f1pred.ingest.odds import load_odds_table
+
     df = load_dataset()
+    odds = load_odds_table()
+    if odds.empty:
+        print("(no bookmaker odds snapshots yet - odds baseline column will be empty)")
     fmt = lambda v: f"{v:.4f}"  # noqa: E731
     for mode in list(MODES) if args.mode == "both" else [args.mode]:
         rows = evaluate_sim(
-            df, mode, min_train_races=args.min_train_races, seed=args.seed, n_sims=args.n_sims
+            df, mode, min_train_races=args.min_train_races, seed=args.seed,
+            n_sims=args.n_sims, odds=odds,
         )
         print(f"\n== {mode} ==")
         print(per_race_summary(rows).to_string(index=False, float_format=fmt))

@@ -35,6 +35,10 @@ Friday–Sunday during race weekends, hourly:
 ```cron
 0 * * * 5-7 docker compose -f /path/to/vroom/deploy/docker-compose.yml \
   exec -T app python -m f1pred.ingest --season 2026 --force --fastf1
+# bookmaker odds snapshot (needs ODDS_API_KEY in .env); Thu/Fri/Sat so the
+# latest pre-race snapshot is fresh - free tier allows 500 requests/month
+0 12 * * 4-6 docker compose -f /path/to/vroom/deploy/docker-compose.yml \
+  exec -T app python -m f1pred.ingest.odds --snapshot --build
 ```
 
 (The predict step gets added to this line once build-order steps 2–3 exist.)
