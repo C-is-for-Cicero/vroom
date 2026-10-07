@@ -91,7 +91,9 @@ def fp_longrun_for_round(season: int, round_number: int) -> pd.DataFrame:
     for code in FP_SESSION_PRIORITY:
         try:
             session = load_session(season, round_number, code, laps=True, telemetry=False)
-        except Exception:
+        except Exception as exc:  # session missing, not yet run, or download hiccup
+            print(f"fp_longrun {season} round {round_number} {code}: "
+                  f"{type(exc).__name__}: {str(exc)[:80]}")
             continue
         laps = session.laps.pick_wo_box()
         if len(laps) == 0:
