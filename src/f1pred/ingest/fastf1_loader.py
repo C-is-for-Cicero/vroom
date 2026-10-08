@@ -22,6 +22,14 @@ CONVENTIONAL_SESSIONS = ("FP1", "FP2", "FP3", "Q", "R")
 SPRINT_SESSIONS = ("FP1", "SQ", "S", "Q", "R")
 
 
+class FastF1BudgetExhausted(RuntimeError):
+    """FastF1's hourly API budget (500 calls/h) is spent for this process.
+
+    Raised by the feature builders AFTER persisting partial progress, so a
+    re-run about an hour later resumes from cache. Callers should stop all
+    further FastF1 work for this pass."""
+
+
 def _enable_cache() -> None:
     import fastf1
 

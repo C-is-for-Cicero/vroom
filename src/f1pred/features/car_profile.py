@@ -116,6 +116,7 @@ def build_fp_longrun(season: int, rounds: list[int]) -> pd.DataFrame:
     done = set(existing["round"].unique()) if existing is not None else set()
 
     frames = [] if existing is None else [existing]
+    exhausted = False
     for rnd in rounds:
         if rnd in done:
             continue
@@ -123,8 +124,7 @@ def build_fp_longrun(season: int, rounds: list[int]) -> pd.DataFrame:
             frame = fp_longrun_for_round(season, rnd)
         except Exception as exc:
             if type(exc).__name__ == "RateLimitExceededError":
-                print(f"fp_longrun {season}: FastF1 hourly API budget exhausted - "
-                      "stopping this pass; re-run in about an hour to resume")
+                exhausted = True
                 break
             raise
         if frame.empty:
@@ -136,6 +136,10 @@ def build_fp_longrun(season: int, rounds: list[int]) -> pd.DataFrame:
     if not out.empty:
         out = out.sort_values(["season", "round"]).reset_index(drop=True)
         out.to_parquet(path, index=False)
+    if exhausted:
+        from f1pred.ingest.fastf1_loader import FastF1BudgetExhausted
+
+        raise FastF1BudgetExhausted(f"stopped during fp_longrun {season}; progress saved")
     return out
 
 

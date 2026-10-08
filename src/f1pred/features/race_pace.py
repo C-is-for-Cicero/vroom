@@ -83,6 +83,7 @@ def build_race_pace(season: int, rounds: list[int]) -> pd.DataFrame:
     done = set(existing["round"].unique()) if existing is not None else set()
 
     frames = [] if existing is None else [existing]
+    exhausted = False
     for rnd in rounds:
         if rnd in done:
             continue
@@ -90,8 +91,7 @@ def build_race_pace(season: int, rounds: list[int]) -> pd.DataFrame:
             frame = race_pace_for_round(season, rnd)
         except Exception as exc:  # session missing / not yet run
             if type(exc).__name__ == "RateLimitExceededError":
-                print(f"race_pace {season}: FastF1 hourly API budget exhausted - "
-                      "stopping this pass; re-run in about an hour to resume")
+                exhausted = True
                 break
             print(f"race_pace {season} round {rnd}: skipped ({type(exc).__name__}: {exc})")
             continue
@@ -102,6 +102,10 @@ def build_race_pace(season: int, rounds: list[int]) -> pd.DataFrame:
     if not out.empty:
         out = out.sort_values(["season", "round"]).reset_index(drop=True)
         out.to_parquet(path, index=False)
+    if exhausted:
+        from f1pred.ingest.fastf1_loader import FastF1BudgetExhausted
+
+        raise FastF1BudgetExhausted(f"stopped during race_pace {season}; progress saved")
     return out
 
 

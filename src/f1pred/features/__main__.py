@@ -59,16 +59,28 @@ def main(argv: list[str] | None = None) -> int:
     if args.race_pace:
         from f1pred.features.car_profile import build_fp_longrun
         from f1pred.features.race_pace import build_race_pace
+        from f1pred.ingest.fastf1_loader import FastF1BudgetExhausted
 
         lap_seasons = [s for s in seasons if s >= args.race_pace_since]
-        for season in lap_seasons:
-            rounds = [int(r) for r in sorted(core.loc[core["season"] == season, "round"].unique())]
-            built = build_race_pace(season, rounds)
-            print(f"race_pace {season}: {0 if built.empty else built['round'].nunique()} rounds")
-        for season in lap_seasons:
-            rounds = [int(r) for r in sorted(core.loc[core["season"] == season, "round"].unique())]
-            built = build_fp_longrun(season, rounds)
-            print(f"fp_longrun {season}: {0 if built.empty else built['round'].nunique()} rounds")
+        try:
+            for season in lap_seasons:
+                rounds = [
+                    int(r) for r in sorted(core.loc[core["season"] == season, "round"].unique())
+                ]
+                built = build_race_pace(season, rounds)
+                print(f"race_pace {season}: "
+                      f"{0 if built.empty else built['round'].nunique()} rounds")
+            for season in lap_seasons:
+                rounds = [
+                    int(r) for r in sorted(core.loc[core["season"] == season, "round"].unique())
+                ]
+                built = build_fp_longrun(season, rounds)
+                print(f"fp_longrun {season}: "
+                      f"{0 if built.empty else built['round'].nunique()} rounds")
+        except FastF1BudgetExhausted as exc:
+            print(f"\nFastF1 hourly API budget exhausted ({exc}).")
+            print("All progress so far is saved - run this exact command again in "
+                  "about an hour to continue where it left off.")
     return 0
 
 

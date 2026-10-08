@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from f1pred.features.car_profile import _stint_features
 from f1pred.features.track_fingerprint import add_track_features, grid_effect_scale
@@ -99,6 +100,10 @@ def test_builders_stop_pass_on_fastf1_rate_limit(tmp_path, monkeypatch):
     monkeypatch.setattr(cp, "fp_longrun_for_round", cp_boom)
     monkeypatch.setattr(cp, "FP_LONGRUN_DIR", tmp_path / "cp")
 
-    rp.build_race_pace(2024, [1, 2, 3, 4, 5])
-    cp.build_fp_longrun(2024, [1, 2, 3, 4, 5])
+    from f1pred.ingest.fastf1_loader import FastF1BudgetExhausted
+
+    with pytest.raises(FastF1BudgetExhausted):
+        rp.build_race_pace(2024, [1, 2, 3, 4, 5])
+    with pytest.raises(FastF1BudgetExhausted):
+        cp.build_fp_longrun(2024, [1, 2, 3, 4, 5])
     assert calls == {"rp": 1, "cp": 1}  # stopped after the first budget error
