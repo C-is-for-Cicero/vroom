@@ -83,3 +83,61 @@ def test_get_all_unknown_endpoint_raises(tmp_path):
     client = make_client(tmp_path, {}, [])
     with pytest.raises(KeyError):
         client.get_all("2026/lapcharts")
+
+
+def test_http_fetch_retries_on_429(tmp_path, monkeypatch):
+    """A 429 must wait (honouring Retry-After) and retry, not crash."""
+    from f1pred.ingest import jolpica as mod
+
+    class FakeResponse:
+        def __init__(self, status, payload=None, retry_after=None):
+            self.status_code = status
+            self._payload = payload
+            self.headers = {"Retry-After": str(retry_after)} if retry_after else {}
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError(f"HTTP {self.status_code}")
+
+        def json(self):
+            return self._payload
+
+    responses = [
+        FakeResponse(429, retry_after=3),
+        FakeResponse(429),
+        FakeResponse(200, payload={"ok": True}),
+    ]
+    sleeps: list[float] = []
+    monkeypatch.setattr(mod.time, "sleep", lambda s: sleeps.append(s))
+
+    client = mod.JolpicaClient(cache_dir=tmp_path, min_interval_s=0)
+
+    class FakeSession:
+        def get(self, url, timeout):
+            return responses.pop(0)
+
+    client._session = FakeSession()
+    assert client._http_fetch("http://x") == {"ok": True}
+    waits = [s for s in sleeps if s >= 1]
+    assert len(waits) == 2
+    assert waits[0] >= 3  # honoured Retry-After
+    assert all(w <= mod.MAX_RETRY_WAIT_S for w in waits)
+
+
+def test_http_fetch_gives_up_after_max_retries(tmp_path, monkeypatch):
+    from f1pred.ingest import jolpica as mod
+
+    class Always429:
+        status_code = 429
+        headers: dict = {}
+
+    monkeypatch.setattr(mod.time, "sleep", lambda s: None)
+    client = mod.JolpicaClient(cache_dir=tmp_path, min_interval_s=0)
+
+    class FakeSession:
+        def get(self, url, timeout):
+            return Always429()
+
+    client._session = FakeSession()
+    with pytest.raises(RuntimeError, match="rate-limiting"):
+        client._http_fetch("http://x")

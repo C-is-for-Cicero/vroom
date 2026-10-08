@@ -25,8 +25,12 @@ from f1pred.config import JOLPICA_RAW_DIR
 
 BASE_URL = "https://api.jolpi.ca/ergast/f1"
 PAGE_LIMIT = 100
-# Jolpica's unauthenticated burst limit is 4 req/s; stay comfortably below it.
-MIN_REQUEST_INTERVAL_S = 0.5
+# Jolpica's unauthenticated burst limit is 4 req/s; stay comfortably below
+# it. The sustained hourly quota still bites on a full multi-season pull -
+# _http_fetch waits through 429s rather than crashing.
+MIN_REQUEST_INTERVAL_S = 1.0
+MAX_RETRIES = 8
+MAX_RETRY_WAIT_S = 900.0
 USER_AGENT = "vroom-f1pred/0.1 (hobby F1 prediction project)"
 
 # (MRData table key, list key) per endpoint leaf, for pagination/merging.
@@ -68,13 +72,34 @@ class JolpicaClient:
     # -- low level ----------------------------------------------------------
 
     def _http_fetch(self, url: str) -> dict[str, Any]:
-        wait = self._min_interval_s - (time.monotonic() - self._last_request_at)
-        if wait > 0:
-            time.sleep(wait)
-        resp = self._session.get(url, timeout=30)
-        self._last_request_at = time.monotonic()
-        resp.raise_for_status()
-        return resp.json()
+        """GET with throttling and polite 429 handling.
+
+        On 429 the client waits (honouring Retry-After, capped at
+        MAX_RETRY_WAIT_S) and retries up to MAX_RETRIES times, so a long
+        ingest pauses through rate limits instead of crashing.
+        """
+        for attempt in range(MAX_RETRIES):
+            wait = self._min_interval_s - (time.monotonic() - self._last_request_at)
+            if wait > 0:
+                time.sleep(wait)
+            resp = self._session.get(url, timeout=30)
+            self._last_request_at = time.monotonic()
+            if resp.status_code == 429:
+                try:
+                    retry_after = float(resp.headers.get("Retry-After", 0) or 0)
+                except ValueError:
+                    retry_after = 0.0
+                delay = min(max(retry_after, 2.0 ** (attempt + 2)), MAX_RETRY_WAIT_S)
+                print(f"jolpica: rate limited (429), waiting {delay:.0f}s "
+                      f"(attempt {attempt + 1}/{MAX_RETRIES})")
+                time.sleep(delay)
+                continue
+            resp.raise_for_status()
+            return resp.json()
+        raise RuntimeError(
+            f"Jolpica still rate-limiting after {MAX_RETRIES} waits for {url} - "
+            "re-run later; everything fetched so far is cached"
+        )
 
     def _cache_path(self, endpoint: str, offset: int) -> Path:
         safe = re.sub(r"[^A-Za-z0-9/_-]", "_", endpoint.strip("/"))
