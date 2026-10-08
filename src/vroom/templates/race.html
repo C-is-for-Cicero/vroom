@@ -10,8 +10,9 @@
       <a href="?mode={{ m }}">{{ m }}</a>{% endif %}{% if not loop.last %} · {% endif %}
     {% endfor %}
     — {{ meta.n_sims }} simulations, trained on {{ meta.trained_races }} races
+    {% if has_charts %}· <span class="muted">click a driver for charts</span>{% endif %}
   </p>
-  <table>
+  <table id="race-table">
     <thead>
       <tr><th></th><th>driver</th><th>team</th>
         {% if mode == 'post_quali' %}<th class="num">grid</th>{% endif %}
@@ -20,7 +21,7 @@
     </thead>
     <tbody>
       {% for d in drivers %}
-      <tr>
+      <tr {% if has_charts %}class="drv" data-i="{{ loop.index0 }}"{% endif %}>
         <td class="muted">{{ loop.index }}</td>
         <td><strong>{{ d.driver_code or d.driver_id }}</strong></td>
         <td class="muted">{{ d.team }}</td>
@@ -42,4 +43,176 @@
     {% endfor %}
   </p>
 </div>
+
+{% if has_charts %}
+<style>
+  tr.drv { cursor: pointer; }
+  tr.drv:hover td { background: rgba(122, 183, 255, 0.06); }
+  tr.chart-row > td { padding: 0.75rem 0.6rem 1.1rem; background: rgba(0,0,0,0.25); }
+  .charts { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; }
+  .chart-box { min-width: 0; flex: 1 1 300px; max-width: 480px; }
+  .chart-box h4 { margin: 0 0 0.15rem; font-size: 0.85rem; color: var(--muted);
+                  font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; }
+  .legend { display: flex; gap: 1rem; font-size: 0.8rem; color: var(--muted);
+            margin-bottom: 0.3rem; }
+  .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+                margin-right: 0.3rem; vertical-align: -1px; }
+  .recent-text { font-size: 0.8rem; color: var(--muted); margin: 0.35rem 0 0; }
+  #tip { position: fixed; pointer-events: none; background: #0a0c10; color: var(--text);
+         border: 1px solid var(--border); border-radius: 5px; padding: 0.25rem 0.5rem;
+         font-size: 0.8rem; z-index: 10; font-variant-numeric: tabular-nums; }
+</style>
+<div id="tip" hidden></div>
+<script id="drivers-data" type="application/json">{{ drivers_json | safe }}</script>
+<script>
+(function () {
+  "use strict";
+  const drivers = JSON.parse(document.getElementById("drivers-data").textContent);
+  const n = drivers.length;
+  const css = getComputedStyle(document.documentElement);
+  const C = {
+    past: css.getPropertyValue("--c-past").trim(),
+    pred: css.getPropertyValue("--c-pred").trim(),
+    grid: css.getPropertyValue("--border").trim(),
+    ink: css.getPropertyValue("--muted").trim(),
+  };
+  const tip = document.getElementById("tip");
+  const SVG = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, parent) {
+    const node = document.createElementNS(SVG, tag);
+    for (const k in attrs) node.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(node);
+    return node;
+  }
+  function showTip(evt, text) {
+    tip.textContent = text;
+    tip.hidden = false;
+    tip.style.left = (evt.clientX + 12) + "px";
+    tip.style.top = (evt.clientY - 10) + "px";
+  }
+  function hideTip() { tip.hidden = true; }
+
+  // Predicted finishing-position distribution: thin bars, rounded tops,
+  // 2px gaps, recessive grid, per-bar hover tooltip, modal bar labeled.
+  function distChart(d) {
+    const W = 460, H = 150, L = 8, B = 20, T = 14;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img",
+      "aria-label": "Predicted finishing position probabilities" });
+    const probs = d.pos_probs;
+    const pmax = Math.max(...probs);
+    const bw = (W - L - 4) / n;
+    const y = (p) => T + (H - B - T) * (1 - p / pmax);
+    [0.5, 1].forEach((f) => el("line", { x1: L, x2: W - 2, y1: y(pmax * f),
+      y2: y(pmax * f), stroke: C.grid, "stroke-width": 1 }, svg));
+    const best = probs.indexOf(pmax);
+    probs.forEach((p, i) => {
+      const x = L + i * bw;
+      const h = Math.max(H - B - y(p), 1.5);
+      const bar = el("rect", { x: x + 1, y: H - B - h, width: Math.max(bw - 2, 2),
+        height: h, rx: 3, fill: C.past }, svg);
+      bar.addEventListener("mousemove", (e) =>
+        showTip(e, `P${i + 1}: ${(p * 100).toFixed(1)}%`));
+      bar.addEventListener("mouseleave", hideTip);
+      if (i === best) el("text", { x: x + bw / 2, y: H - B - h - 4,
+        "text-anchor": "middle", "font-size": 10, fill: C.ink }, svg)
+        .textContent = (p * 100).toFixed(0) + "%";
+    });
+    [1, 5, 10, 15, 20].filter((t) => t <= n).forEach((t) => {
+      el("text", { x: L + (t - 0.5) * bw, y: H - 6, "text-anchor": "middle",
+        "font-size": 10, fill: C.ink }, svg).textContent = "P" + t;
+    });
+    return svg;
+  }
+
+  // Previous results vs prediction: last 5 finishes (blue line + dots,
+  // DNF hollow at the bottom), predicted expected position as a red
+  // diamond joined by a dashed line. Position axis runs 1 (top) to n.
+  function formChart(d) {
+    const W = 320, H = 150, L = 26, R = 14, B = 20, T = 12;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img",
+      "aria-label": "Recent finishes and predicted position" });
+    const pts = d.recent.concat([{ label: "pred", position: d.exp_position,
+      pred: true }]);
+    const x = (i) => L + (W - L - R) * (pts.length === 1 ? 0.5 : i / (pts.length - 1));
+    const y = (pos) => T + (H - B - T) * ((pos - 1) / (n - 1));
+    [1, 10, n].forEach((g) => {
+      el("line", { x1: L - 3, x2: W - R, y1: y(g), y2: y(g), stroke: C.grid,
+        "stroke-width": 1 }, svg);
+      el("text", { x: L - 6, y: y(g) + 3, "text-anchor": "end", "font-size": 10,
+        fill: C.ink }, svg).textContent = g;
+    });
+    let prev = null;
+    pts.forEach((p, i) => {
+      const yy = y(p.position === null ? n : Math.min(p.position, n));
+      if (prev !== null) el("line", { x1: prev.x, y1: prev.y, x2: x(i), y2: yy,
+        stroke: p.pred ? C.pred : C.past, "stroke-width": 2,
+        "stroke-dasharray": p.pred ? "4 3" : "none" }, svg);
+      let mark;
+      if (p.pred) {
+        const s = 5.5, cx = x(i);
+        mark = el("path", { d: `M ${cx} ${yy - s} L ${cx + s} ${yy} L ${cx} ${yy + s} L ${cx - s} ${yy} Z`,
+          fill: C.pred, stroke: "#171a21", "stroke-width": 2 }, svg);
+      } else if (p.position === null) {
+        mark = el("circle", { cx: x(i), cy: yy, r: 4.5, fill: "none",
+          stroke: C.past, "stroke-width": 2 }, svg);
+      } else {
+        mark = el("circle", { cx: x(i), cy: yy, r: 4.5, fill: C.past,
+          stroke: "#171a21", "stroke-width": 2 }, svg);
+      }
+      const label = p.pred ? `predicted: P${Number(p.position).toFixed(1)}`
+        : (p.position === null ? `${p.label}: DNF` : `${p.label}: P${p.position}`);
+      mark.addEventListener("mousemove", (e) => showTip(e, label));
+      mark.addEventListener("mouseleave", hideTip);
+      el("text", { x: x(i), y: H - 6, "text-anchor": "middle", "font-size": 10,
+        fill: C.ink }, svg).textContent = p.pred ? "pred" : p.label;
+      el("text", { x: x(i), y: Math.max(yy - 9, 10), "text-anchor": "middle",
+        "font-size": 10, fill: C.ink }, svg).textContent =
+        p.pred ? Number(p.position).toFixed(1) : (p.position === null ? "DNF" : p.position);
+      prev = { x: x(i), y: yy };
+    });
+    return svg;
+  }
+
+  function panel(d) {
+    const wrap = document.createElement("div");
+    wrap.className = "charts";
+    const legend = `<div class="legend">
+      <span><span class="sw" style="background:${C.past}"></span>last ${d.recent.length} races</span>
+      <span><span class="sw" style="background:${C.pred}"></span>predicted</span></div>`;
+    const recentText = d.recent.map((r) => r.position === null ? "DNF" : "P" + r.position)
+      .join(", ");
+    const b1 = document.createElement("div");
+    b1.className = "chart-box";
+    b1.innerHTML = `<h4>Predicted finish distribution</h4>`;
+    b1.appendChild(distChart(d));
+    const b2 = document.createElement("div");
+    b2.className = "chart-box";
+    b2.innerHTML = `<h4>Previous vs predicted</h4>` + legend;
+    b2.appendChild(formChart(d));
+    b2.insertAdjacentHTML("beforeend",
+      `<p class="recent-text">Last results: ${recentText} — predicted P${d.exp_position}</p>`);
+    wrap.appendChild(b1);
+    wrap.appendChild(b2);
+    return wrap;
+  }
+
+  document.querySelectorAll("tr.drv").forEach((row) => {
+    row.addEventListener("click", () => {
+      const open = row.nextElementSibling;
+      if (open && open.classList.contains("chart-row")) { open.remove(); return; }
+      document.querySelectorAll("tr.chart-row").forEach((r) => r.remove());
+      const d = drivers[Number(row.dataset.i)];
+      if (!d.pos_probs) return;
+      const tr = document.createElement("tr");
+      tr.className = "chart-row";
+      const td = document.createElement("td");
+      td.colSpan = row.children.length;
+      td.appendChild(panel(d));
+      tr.appendChild(td);
+      row.after(tr);
+    });
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

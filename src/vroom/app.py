@@ -213,12 +213,15 @@ def race(request: Request, season: int, round_number: int, mode: str | None = No
         "post_quali" if "post_quali" in available else "pre_quali"
     )
     data = _load_prediction(season, round_number, use_mode)
+    has_charts = bool(data["drivers"]) and "pos_probs" in data["drivers"][0]
     return templates.TemplateResponse(
         request,
         "race.html",
         {
             "meta": data["meta"],
             "drivers": data["drivers"],
+            "drivers_json": json.dumps(data["drivers"]),
+            "has_charts": has_charts,
             "modes": sorted(available),
             "mode": use_mode,
             "all_predictions": _prediction_index(),

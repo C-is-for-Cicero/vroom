@@ -170,6 +170,23 @@ def build_prediction_frame(season: int, round_number: int, mode: str) -> pd.Data
     return add_pace_form_features(df)
 
 
+def recent_results(history: pd.DataFrame, driver_id: str, n: int = 5) -> list[dict]:
+    """The driver's last `n` race results before the target round, oldest
+    first: {label, position (None for DNF/unclassified), dnf}. Feeds the
+    'predicted vs previous' chart on the race page."""
+    rows = history[history["driver_id"] == driver_id].sort_values(
+        ["season", "round"], kind="stable"
+    ).tail(n)
+    return [
+        {
+            "label": f"{int(r.season) % 100}R{int(r.round)}",
+            "position": int(r.position) if pd.notna(r.position) else None,
+            "dnf": bool(r.dnf),
+        }
+        for r in rows.itertuples()
+    ]
+
+
 def predict_round(
     season: int,
     round_number: int,
@@ -218,6 +235,9 @@ def predict_round(
             "p_podium": np.round(sim.p_podium, 4),
             "p_points": np.round(sim.p_points, 4),
             "exp_position": np.round(sim.exp_position, 2),
+            # per-driver extras for the webapp's charts
+            "pos_probs": [list(np.round(row, 4)) for row in sim.pos_probs],
+            "recent": [recent_results(train, d) for d in test["driver_id"]],
         }
     ).sort_values("exp_position")
     meta = {
@@ -246,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
     table, meta = predict_round(args.season, args.round, args.mode, args.n_sims, args.seed)
     print(f"\n{meta['race_name']} {args.season} (round {args.round}, {args.mode}, "
           f"{meta['trained_races']} training races)\n")
-    print(table.to_string(index=False))
+    print(table.drop(columns=["pos_probs", "recent"]).to_string(index=False))
 
     PREDICTIONS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = PREDICTIONS_DIR / f"{args.season}_{args.round:02d}_{args.mode}.json"
