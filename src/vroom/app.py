@@ -169,13 +169,35 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request):
+def _landing_prediction() -> dict | None:
+    """The prediction the landing page should show: the NEXT upcoming race
+    (smallest not-yet-raced round with a prediction), falling back to the
+    newest prediction file when everything predicted has already raced."""
     preds = _prediction_index()
     if not preds:
+        return None
+    try:
+        import pandas as pd
+
+        core = pd.read_parquet(PROCESSED_DIR / "core.parquet")
+        season = max(p["season"] for p in preds)
+        raced = set(core.loc[core["season"] == season, "round"].astype(int))
+        upcoming = sorted(
+            p["round"] for p in preds if p["season"] == season and p["round"] not in raced
+        )
+        if upcoming:
+            return {"season": season, "round": upcoming[0]}
+    except Exception:
+        pass
+    return preds[0]
+
+
+@app.get("/", response_class=HTMLResponse)
+def index(request: Request):
+    landing = _landing_prediction()
+    if landing is None:
         return templates.TemplateResponse(request, "index.html", {"predictions": []})
-    latest = preds[0]
-    return RedirectResponse(f"/race/{latest['season']}/{latest['round']}")
+    return RedirectResponse(f"/race/{landing['season']}/{landing['round']}")
 
 
 @app.get("/race/{season}/{round_number}", response_class=HTMLResponse)
