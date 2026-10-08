@@ -1,4 +1,23 @@
-# Deploying Vroom on a Vultr VPS
+# Deploying Vroom
+
+## Local dress rehearsal (Docker Desktop)
+
+Runs the exact production container on your own machine, reusing the data
+already pulled into the repo's `data/` directory. Needs Docker Desktop
+(Windows: with the WSL2 backend).
+
+```bash
+cd deploy
+cp .env.example .env     # set VROOM_SECRET_KEY; use VROOM_COOKIE_SECURE=0 locally
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build app
+docker compose exec app python -m vroom.manage create-admin <you>
+```
+
+Open http://localhost:8000 and log in. Caddy/HTTPS is skipped locally
+(Let's Encrypt needs a public domain); everything else matches the VPS.
+Stop with `docker compose down`.
+
+# Deploying on a Vultr VPS
 
 One-time setup on the VPS (Docker + Compose installed, duckdns subdomain
 pointing at the VPS IP):

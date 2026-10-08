@@ -1,0 +1,13 @@
+# Local dress rehearsal override: reuses the data already pulled into the
+# repo's data/ directory (instead of the empty f1-data volume) and exposes
+# the app directly on localhost:8000. Caddy/HTTPS is a production concern;
+# start only the app service:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build app
+#
+services:
+  app:
+    volumes:
+      - ../data:/data
+    ports:
+      - "8000:8000"
