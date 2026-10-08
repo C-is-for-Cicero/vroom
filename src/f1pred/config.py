@@ -110,6 +110,12 @@ REGULATION_RESET_SEASONS: frozenset[int] = frozenset({2026, 2022, 2014})
 # Earlier Jolpica data is used only for long-horizon priors.
 FIRST_DETAILED_SEASON = 2018
 
+# First season FastF1 LAP data (race-pace targets, FP long runs) is pulled
+# for by default. FastF1 enforces a 500-calls/hour API budget, so earlier
+# seasons cost real download budget; extend with --race-pace-since if the
+# extra target history is wanted.
+FIRST_LAP_DATA_SEASON = 2023
+
 # Simulation defaults. Every sim run must be seeded (numpy.random.default_rng).
 N_SIMS_DEFAULT = 10_000
 SIM_SEED_DEFAULT = 2026

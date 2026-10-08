@@ -89,6 +89,10 @@ def build_race_pace(season: int, rounds: list[int]) -> pd.DataFrame:
         try:
             frame = race_pace_for_round(season, rnd)
         except Exception as exc:  # session missing / not yet run
+            if type(exc).__name__ == "RateLimitExceededError":
+                print(f"race_pace {season}: FastF1 hourly API budget exhausted - "
+                      "stopping this pass; re-run in about an hour to resume")
+                break
             print(f"race_pace {season} round {rnd}: skipped ({type(exc).__name__}: {exc})")
             continue
         if not frame.empty:

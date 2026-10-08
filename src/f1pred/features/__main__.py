@@ -1,15 +1,23 @@
 """CLI: python -m f1pred.features --seasons 2018-2026 [--race-pace]
 
 Rebuilds data/processed/ feature tables from the raw pulls:
-core.parquet (results + quali + form) and, with --race-pace, the per-season
-race-pace target parquets (needs FastF1 downloads for races not yet cached).
+core.parquet (results + quali + form + track), and with --race-pace the
+FastF1-derived tables (race-pace targets and FP long runs; downloads races
+not yet cached). FastF1 enforces an hourly API budget, so lap data is only
+pulled from --race-pace-since (default 2023, the span the models use);
+builders stop cleanly when the budget runs out - re-run later to resume.
 """
 
 from __future__ import annotations
 
 import argparse
 
-from f1pred.config import CURRENT_SEASON, FIRST_DETAILED_SEASON, PROCESSED_DIR
+from f1pred.config import (
+    CURRENT_SEASON,
+    FIRST_DETAILED_SEASON,
+    FIRST_LAP_DATA_SEASON,
+    PROCESSED_DIR,
+)
 from f1pred.features.base import build_core_table
 from f1pred.features.form import add_form_features
 from f1pred.features.track_fingerprint import add_track_features
@@ -31,7 +39,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="f1pred.features", description=__doc__)
     parser.add_argument("--seasons", default=f"{FIRST_DETAILED_SEASON}-{CURRENT_SEASON}")
     parser.add_argument(
-        "--race-pace", action="store_true", help="also build the FastF1 race-pace target"
+        "--race-pace", action="store_true",
+        help="also build the FastF1 race-pace targets and FP long runs",
+    )
+    parser.add_argument(
+        "--race-pace-since", type=int, default=FIRST_LAP_DATA_SEASON,
+        help="first season to pull FastF1 lap data for (earlier seasons cost "
+             "API budget without being used by the current models)",
     )
     args = parser.parse_args(argv)
     seasons = parse_seasons(args.seasons)
@@ -43,12 +57,18 @@ def main(argv: list[str] | None = None) -> int:
     print(f"core.parquet: {len(core)} rows, seasons {seasons[0]}-{seasons[-1]}")
 
     if args.race_pace:
+        from f1pred.features.car_profile import build_fp_longrun
         from f1pred.features.race_pace import build_race_pace
 
-        for season in seasons:
-            rounds = sorted(core.loc[core["season"] == season, "round"].unique())
-            built = build_race_pace(season, [int(r) for r in rounds])
+        lap_seasons = [s for s in seasons if s >= args.race_pace_since]
+        for season in lap_seasons:
+            rounds = [int(r) for r in sorted(core.loc[core["season"] == season, "round"].unique())]
+            built = build_race_pace(season, rounds)
             print(f"race_pace {season}: {0 if built.empty else built['round'].nunique()} rounds")
+        for season in lap_seasons:
+            rounds = [int(r) for r in sorted(core.loc[core["season"] == season, "round"].unique())]
+            built = build_fp_longrun(season, rounds)
+            print(f"fp_longrun {season}: {0 if built.empty else built['round'].nunique()} rounds")
     return 0
 
 

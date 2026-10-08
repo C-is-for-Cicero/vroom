@@ -92,6 +92,8 @@ def fp_longrun_for_round(season: int, round_number: int) -> pd.DataFrame:
         try:
             session = load_session(season, round_number, code, laps=True, telemetry=False)
         except Exception as exc:  # session missing, not yet run, or download hiccup
+            if type(exc).__name__ == "RateLimitExceededError":
+                raise  # out of API budget: let the builder stop the whole pass
             print(f"fp_longrun {season} round {round_number} {code}: "
                   f"{type(exc).__name__}: {str(exc)[:80]}")
             continue
@@ -117,7 +119,14 @@ def build_fp_longrun(season: int, rounds: list[int]) -> pd.DataFrame:
     for rnd in rounds:
         if rnd in done:
             continue
-        frame = fp_longrun_for_round(season, rnd)
+        try:
+            frame = fp_longrun_for_round(season, rnd)
+        except Exception as exc:
+            if type(exc).__name__ == "RateLimitExceededError":
+                print(f"fp_longrun {season}: FastF1 hourly API budget exhausted - "
+                      "stopping this pass; re-run in about an hour to resume")
+                break
+            raise
         if frame.empty:
             print(f"fp_longrun {season} round {rnd}: no usable long runs")
             continue

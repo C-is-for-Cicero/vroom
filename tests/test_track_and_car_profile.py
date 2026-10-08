@@ -73,3 +73,32 @@ def test_stint_features_extract_pace_and_degradation():
     assert out.loc["BBB", "fp_deg_slope"] > out.loc["AAA", "fp_deg_slope"]
     assert out.loc["AAA", "fp_consistency"] < 0.01  # perfectly linear laps
     assert out.loc["AAA", "fp_longrun_laps"] == 14
+
+
+def test_builders_stop_pass_on_fastf1_rate_limit(tmp_path, monkeypatch):
+    """Once FastF1's hourly budget trips, the pass stops instead of
+    hammering every remaining round."""
+    import f1pred.features.car_profile as cp
+    import f1pred.features.race_pace as rp
+
+    class RateLimitExceededError(Exception):
+        pass
+
+    calls = {"rp": 0, "cp": 0}
+
+    def rp_boom(season, rnd):
+        calls["rp"] += 1
+        raise RateLimitExceededError("any API: 500 calls/h")
+
+    def cp_boom(season, rnd):
+        calls["cp"] += 1
+        raise RateLimitExceededError("any API: 500 calls/h")
+
+    monkeypatch.setattr(rp, "race_pace_for_round", rp_boom)
+    monkeypatch.setattr(rp, "RACE_PACE_DIR", tmp_path / "rp")
+    monkeypatch.setattr(cp, "fp_longrun_for_round", cp_boom)
+    monkeypatch.setattr(cp, "FP_LONGRUN_DIR", tmp_path / "cp")
+
+    rp.build_race_pace(2024, [1, 2, 3, 4, 5])
+    cp.build_fp_longrun(2024, [1, 2, 3, 4, 5])
+    assert calls == {"rp": 1, "cp": 1}  # stopped after the first budget error
