@@ -15,6 +15,12 @@
       --border: #262b35;
       --c-past: #4d94e8;   /* chart: past results      */
       --c-pred: #ff3b30;   /* chart: predicted         */
+      /* validated categorical order for multi-driver overlays (dark) */
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --series-4: #c98500;
+      --series-5: #d55181;
     }
     * { box-sizing: border-box; }
     body {
@@ -68,6 +74,7 @@
     <nav>
       <a href="/">Race</a>
       <a href="/championship">Championship</a>
+      <a href="/telemetry">Telemetry</a>
       <a href="/track-record">Track record</a>
     </nav>
     {% set u = request.scope.get("state", {}).get("user") %}

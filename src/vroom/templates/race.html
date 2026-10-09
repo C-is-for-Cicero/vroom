@@ -12,6 +12,22 @@
     — {{ meta.n_sims }} simulations, trained on {{ meta.trained_races }} races
     {% if has_charts %}· <span class="muted">click a driver for charts</span>{% endif %}
   </p>
+</div>
+
+{% if has_charts %}
+<div class="panel">
+  <h3 style="margin-top:0">Compare predicted finish distributions</h3>
+  <div class="cmp-controls">
+    <select id="cmp-sel"></select>
+    <button id="cmp-add" type="button">Add driver</button>
+    <span class="muted" style="font-size:0.85rem">up to 5 drivers</span>
+  </div>
+  <div id="cmp-chips" class="cmp-chips"></div>
+  <div id="cmp-chart"></div>
+</div>
+{% endif %}
+
+<div class="panel">
   <table id="race-table">
     <thead>
       <tr><th></th><th>driver</th><th>team</th>
@@ -58,6 +74,17 @@
   .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
                 margin-right: 0.3rem; vertical-align: -1px; }
   .recent-text { font-size: 0.8rem; color: var(--muted); margin: 0.35rem 0 0; }
+  .cmp-controls { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+                  margin-bottom: 0.5rem; }
+  .cmp-controls select, .cmp-controls button { width: auto; min-width: 7rem; }
+  .cmp-chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+  .cmp-chips .chip { display: inline-flex; align-items: center; gap: 0.45rem;
+      border: 1px solid var(--border); border-radius: 999px; padding: 0.2rem 0.7rem;
+      font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+  .cmp-chips .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .cmp-chips button { all: unset; cursor: pointer; color: var(--muted); }
+  .cmp-chips button:hover { color: var(--text); }
+  #cmp-chart svg { display: block; width: 100%; max-width: 760px; }
   #tip { position: fixed; pointer-events: none; background: #0a0c10; color: var(--text);
          border: 1px solid var(--border); border-radius: 5px; padding: 0.25rem 0.5rem;
          font-size: 0.8rem; z-index: 10; font-variant-numeric: tabular-nums; }
@@ -195,6 +222,91 @@
     wrap.appendChild(b2);
     return wrap;
   }
+
+  // --- Compare panel: overlay predicted distributions for up to 5 drivers.
+  const SLOTS = [1, 2, 3, 4, 5].map((i) =>
+    css.getPropertyValue("--series-" + i).trim());
+  const cmpSel = document.getElementById("cmp-sel");
+  const cmpChips = document.getElementById("cmp-chips");
+  const cmpChart = document.getElementById("cmp-chart");
+  let cmp = [];  // [{i, color}] — color stays with the driver (entity, not rank)
+
+  drivers.forEach((d, i) => {
+    const o = document.createElement("option");
+    o.value = i; o.textContent = (d.driver_code || d.driver_id) + " — " + d.team;
+    cmpSel.appendChild(o);
+  });
+
+  function cmpRender() {
+    cmpChips.innerHTML = "";
+    cmp.forEach((c) => {
+      const d = drivers[c.i];
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.innerHTML = `<span class="dot" style="background:${c.color}"></span>` +
+        `<strong>${d.driver_code}</strong> win ${(d.p_win * 100).toFixed(1)}% · ` +
+        `exp P${d.exp_position} `;
+      const x = document.createElement("button");
+      x.textContent = "×"; x.setAttribute("aria-label", "remove " + d.driver_code);
+      x.addEventListener("click", () => { cmp = cmp.filter((v) => v !== c); cmpRender(); });
+      chip.appendChild(x);
+      cmpChips.appendChild(chip);
+    });
+    cmpChart.innerHTML = "";
+    if (!cmp.length) return;
+    const W = 760, H = 230, L = 36, R = 34, T = 14, B = 24;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img",
+      "aria-label": "Predicted finishing position distributions" });
+    const pmax = Math.max(...cmp.flatMap((c) => drivers[c.i].pos_probs));
+    const X = (pos) => L + (W - L - R) * ((pos - 1) / (n - 1));
+    const Y = (p) => T + (H - T - B) * (1 - p / pmax);
+    [0.5, 1].forEach((f) => {
+      el("line", { x1: L, x2: W - R, y1: Y(pmax * f), y2: Y(pmax * f),
+        stroke: C.grid, "stroke-width": 1 }, svg);
+      el("text", { x: L - 5, y: Y(pmax * f) + 3, "text-anchor": "end",
+        "font-size": 10, fill: C.ink }, svg).textContent =
+        Math.round(pmax * f * 100) + "%";
+    });
+    [1, 5, 10, 15, 20].filter((t) => t <= n).forEach((t) => {
+      el("text", { x: X(t), y: H - 8, "text-anchor": "middle", "font-size": 10,
+        fill: C.ink }, svg).textContent = "P" + t;
+    });
+    cmp.forEach((c) => {
+      const d = drivers[c.i];
+      const pts = d.pos_probs.map((p, k) =>
+        `${X(k + 1).toFixed(1)},${Y(p).toFixed(1)}`);
+      el("polyline", { points: pts.join(" "), fill: "none", stroke: c.color,
+        "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+      const peak = d.pos_probs.indexOf(Math.max(...d.pos_probs));
+      el("text", { x: X(peak + 1), y: Math.max(Y(d.pos_probs[peak]) - 6, 10),
+        "text-anchor": "middle", "font-size": 10, fill: C.ink }, svg)
+        .textContent = d.driver_code;
+    });
+    svg.addEventListener("mousemove", (evt) => {
+      const rect = svg.getBoundingClientRect();
+      const xv = (evt.clientX - rect.left) / rect.width * W;
+      const pos = Math.max(1, Math.min(n,
+        Math.round((xv - L) / (W - L - R) * (n - 1) + 1)));
+      showTip(evt, "P" + pos + " — " + cmp.map((c) => {
+        const d = drivers[c.i];
+        return `${d.driver_code} ${(d.pos_probs[pos - 1] * 100).toFixed(1)}%`;
+      }).join(" · "));
+    });
+    svg.addEventListener("mouseleave", hideTip);
+    cmpChart.appendChild(svg);
+  }
+
+  document.getElementById("cmp-add").addEventListener("click", () => {
+    const i = Number(cmpSel.value);
+    if (cmp.some((c) => c.i === i) || cmp.length >= 5 || !drivers[i].pos_probs) return;
+    const used = cmp.map((c) => c.color);
+    cmp.push({ i, color: SLOTS.find((s) => !used.includes(s)) });
+    cmpRender();
+  });
+
+  // complete at rest: open with the top three drivers overlaid
+  cmp = drivers.slice(0, 3).map((d, i) => ({ i, color: SLOTS[i] }));
+  cmpRender();
 
   document.querySelectorAll("tr.drv").forEach((row) => {
     row.addEventListener("click", () => {

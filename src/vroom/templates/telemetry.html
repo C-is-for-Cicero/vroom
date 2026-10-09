@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}Telemetry — Vroom{% endblock %}
+{% block content %}
+<div class="panel">
+  <h2 style="margin-top:0">Fastest-lap telemetry
+    <span class="muted" style="font-weight:normal">observed data, not predictions</span></h2>
+  <div class="tl-controls">
+    <select id="ev"></select>
+    <select id="sess">
+      <option>Q</option><option>R</option><option>FP1</option><option>FP2</option>
+      <option>FP3</option><option>SQ</option><option>S</option>
+    </select>
+    <select id="drv"></select>
+    <button id="add" type="button">Add driver</button>
+  </div>
+  <div id="chips" class="tl-chips"></div>
+  <p id="status" class="muted" hidden></p>
+  <div id="charts" hidden>
+    <div class="tl-row"><span class="tl-ylab">Delta (s)</span><div class="tl-plot" data-k="delta"></div></div>
+    <div class="tl-row"><span class="tl-ylab">Speed (km/h)</span><div class="tl-plot" data-k="speed"></div></div>
+    <div class="tl-row"><span class="tl-ylab">Throttle (%)</span><div class="tl-plot" data-k="throttle"></div></div>
+    <div class="tl-row"><span class="tl-ylab">Brake</span><div class="tl-plot" data-k="brake"></div></div>
+    <p class="muted" style="font-size:0.8rem">Delta is time lost/gained vs the first
+    driver added, by distance. Hover for values; first load of a session downloads
+    its telemetry and can take a minute.</p>
+  </div>
+</div>
+<style>
+  .tl-controls { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+  .tl-controls select, .tl-controls button { width: auto; min-width: 7rem; }
+  .tl-chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+  .chip { display: inline-flex; align-items: center; gap: 0.45rem;
+          border: 1px solid var(--border); border-radius: 999px;
+          padding: 0.2rem 0.7rem; font-size: 0.85rem;
+          font-variant-numeric: tabular-nums; }
+  .chip .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .chip button { all: unset; cursor: pointer; color: var(--muted); padding: 0 0.1rem; }
+  .chip button:hover { color: var(--text); }
+  .tl-row { display: flex; align-items: stretch; gap: 0.4rem; margin-bottom: 0.4rem; }
+  .tl-ylab { writing-mode: vertical-rl; transform: rotate(180deg); color: var(--muted);
+             font-size: 0.72rem; text-align: center; }
+  .tl-plot { flex: 1; min-width: 0; }
+  .tl-plot svg { display: block; width: 100%; }
+  #tl-tip { position: fixed; pointer-events: none; background: #0a0c10;
+            border: 1px solid var(--border); border-radius: 5px; z-index: 10;
+            padding: 0.3rem 0.55rem; font-size: 0.8rem;
+            font-variant-numeric: tabular-nums; }
+  #tl-tip .r { display: flex; gap: 0.6rem; justify-content: space-between; }
+</style>
+<div id="tl-tip" hidden></div>
+<script id="events-data" type="application/json">{{ events_json | safe }}</script>
+<script>
+(function () {
+  "use strict";
+  const events = JSON.parse(document.getElementById("events-data").textContent);
+  const css = getComputedStyle(document.documentElement);
+  const SLOTS = [1, 2, 3, 4, 5].map((i) => css.getPropertyValue("--series-" + i).trim());
+  const GRID = css.getPropertyValue("--border").trim();
+  const INK = css.getPropertyValue("--muted").trim();
+  const evSel = document.getElementById("ev"), sessSel = document.getElementById("sess"),
+        drvSel = document.getElementById("drv"), chipsEl = document.getElementById("chips"),
+        statusEl = document.getElementById("status"), chartsEl = document.getElementById("charts"),
+        tip = document.getElementById("tl-tip");
+  const demoEl = document.getElementById("telemetry-demo");
+  const demo = demoEl ? JSON.parse(demoEl.textContent) : null;
+  let loaded = [];  // [{driver, color, data}]
+
+  events.forEach((e, i) => {
+    const o = document.createElement("option");
+    o.value = i; o.textContent = e.name;
+    evSel.appendChild(o);
+  });
+  function fillDrivers() {
+    drvSel.innerHTML = "";
+    (events[evSel.value] ? events[evSel.value].drivers : []).forEach((d) => {
+      const o = document.createElement("option");
+      o.value = d; o.textContent = d;
+      drvSel.appendChild(o);
+    });
+  }
+  if (events.length) fillDrivers();
+  if (demo) {  // static preview: open with the demo drivers loaded
+    demo.forEach((d, i) => loaded.push({ driver: d.driver, color: SLOTS[i], data: d }));
+    setTimeout(render, 0);
+  }
+  evSel.addEventListener("change", () => { loaded = []; render(); fillDrivers(); });
+  sessSel.addEventListener("change", () => { loaded = []; render(); });
+
+  function status(msg) { statusEl.hidden = !msg; statusEl.textContent = msg || ""; }
+
+  async function fetchDriver(code) {
+    if (demo) {
+      const hit = demo.find((d) => d.driver === code);
+      if (!hit) throw new Error(code + ": not in this static preview");
+      return hit;
+    }
+    const e = events[evSel.value];
+    const url = `/api/telemetry/${e.season}/${e.round}/${sessSel.value}/${code}`;
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.detail || resp.statusText);
+    }
+    return resp.json();
+  }
+
+  document.getElementById("add").addEventListener("click", async () => {
+    const code = drvSel.value;
+    if (!code || loaded.some((l) => l.driver === code)) return;
+    if (loaded.length >= 5) { status("five drivers max - remove one first"); return; }
+    status(`loading ${code}... (first load of a session downloads telemetry; can take a minute)`);
+    try {
+      const data = await fetchDriver(code);
+      const used = loaded.map((l) => l.color);
+      const color = SLOTS.find((c) => !used.includes(c));
+      loaded.push({ driver: code, color, data });
+      status("");
+      render();
+    } catch (err) { status(String(err.message || err)); }
+  });
+
+  function removeDriver(code) {
+    loaded = loaded.filter((l) => l.driver !== code);  // others keep their colors
+    render();
+  }
+
+  function fmtLap(s) {
+    const m = Math.floor(s / 60);
+    return m + ":" + (s - m * 60).toFixed(3).padStart(6, "0");
+  }
+
+  const SVGNS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs, parent) {
+    const n = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+  const interp = (xs, ys, x) => {
+    if (x <= xs[0]) return ys[0];
+    if (x >= xs[xs.length - 1]) return ys[ys.length - 1];
+    let lo = 0, hi = xs.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; (xs[m] <= x) ? lo = m : hi = m; }
+    const t = (x - xs[lo]) / (xs[hi] - xs[lo]);
+    return ys[lo] + t * (ys[hi] - ys[lo]);
+  };
+
+  function seriesFor(kind) {
+    if (kind !== "delta")
+      return loaded.map((l) => ({ ...l, xs: l.data.dist, ys: l.data[kind] }));
+    const ref = loaded[0];
+    return loaded.map((l) => ({
+      ...l,
+      xs: ref.data.dist,
+      ys: ref.data.dist.map((d) =>
+        interp(l.data.dist, l.data.time, d) - interp(ref.data.dist, ref.data.time, d)),
+    }));
+  }
+
+  function drawPanel(container, kind, H) {
+    container.innerHTML = "";
+    const W = 900, L = 42, R = 12, T = 8, B = kind === "brake" ? 22 : 8;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img",
+      "aria-label": kind + " by distance" });
+    const series = seriesFor(kind);
+    const xmax = Math.max(...series.map((s) => s.xs[s.xs.length - 1]));
+    let ymin = Math.min(0, ...series.flatMap((s) => s.ys));
+    let ymax = Math.max(...series.flatMap((s) => s.ys));
+    if (kind === "throttle" || kind === "brake") { ymin = 0; ymax = 100; }
+    if (ymax === ymin) ymax = ymin + 1;
+    const pad = (ymax - ymin) * 0.06;
+    ymin -= kind === "delta" ? pad : 0; ymax += pad;
+    const X = (v) => L + (W - L - R) * (v / xmax);
+    const Y = (v) => T + (H - T - B) * (1 - (v - ymin) / (ymax - ymin));
+    const ticks = kind === "delta" ? [ymin + pad, 0, ymax - pad]
+      : kind === "speed" ? [100, 200, 300].filter((t) => t < ymax)
+      : [0, 100];
+    ticks.forEach((t) => {
+      el("line", { x1: L, x2: W - R, y1: Y(t), y2: Y(t), stroke: GRID,
+        "stroke-width": 1 }, svg);
+      el("text", { x: L - 5, y: Y(t) + 3, "text-anchor": "end", "font-size": 10,
+        fill: INK }, svg).textContent = kind === "delta" ? t.toFixed(1) : Math.round(t);
+    });
+    if (kind === "brake")
+      for (let km = 1000; km < xmax; km += 1000)
+        el("text", { x: X(km), y: H - 5, "text-anchor": "middle", "font-size": 10,
+          fill: INK }, svg).textContent = (km / 1000) + "km";
+    series.forEach((s) => {
+      const pts = s.xs.map((x, i) => `${X(x).toFixed(1)},${Y(s.ys[i]).toFixed(1)}`);
+      el("polyline", { points: pts.join(" "), fill: "none", stroke: s.color,
+        "stroke-width": 1.6, "stroke-linejoin": "round" }, svg);
+    });  // identity comes from the chip legend + tooltip, not end labels
+    const cursor = el("line", { y1: T, y2: H - B, stroke: INK, "stroke-width": 1,
+      "stroke-dasharray": "3 3", visibility: "hidden" }, svg);
+    svg.addEventListener("mousemove", (evt) => {
+      const rect = svg.getBoundingClientRect();
+      const x = (evt.clientX - rect.left) / rect.width * W;
+      const d = Math.max(0, Math.min(xmax, (x - L) / (W - L - R) * xmax));
+      document.querySelectorAll(".tl-plot svg").forEach((other) => {
+        const c = other.__cursor; if (c) { c.setAttribute("x1", x); c.setAttribute("x2", x);
+          c.setAttribute("visibility", "visible"); }
+      });
+      const unit = { delta: "s", speed: "km/h", throttle: "%", brake: "%" }[kind];
+      tip.innerHTML = `<div class="r"><span>${Math.round(d)} m</span></div>` +
+        series.map((s) => `<div class="r"><span style="color:${s.color}">●</span>` +
+          `<span>${s.driver}</span><span>${interp(s.xs, s.ys, d).toFixed(kind === "delta" ? 2 : 0)} ${unit}</span></div>`).join("");
+      tip.hidden = false;
+      tip.style.left = (evt.clientX + 14) + "px";
+      tip.style.top = (evt.clientY - 10) + "px";
+    });
+    svg.addEventListener("mouseleave", () => {
+      tip.hidden = true;
+      document.querySelectorAll(".tl-plot svg").forEach((other) => {
+        if (other.__cursor) other.__cursor.setAttribute("visibility", "hidden");
+      });
+    });
+    svg.__cursor = cursor;
+    container.appendChild(svg);
+  }
+
+  function render() {
+    chipsEl.innerHTML = "";
+    loaded.forEach((l) => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.innerHTML = `<span class="dot" style="background:${l.color}"></span>` +
+        `<strong>${l.driver}</strong> ${fmtLap(l.data.lap_time)} `;
+      const x = document.createElement("button");
+      x.textContent = "×"; x.setAttribute("aria-label", "remove " + l.driver);
+      x.addEventListener("click", () => removeDriver(l.driver));
+      chip.appendChild(x);
+      chipsEl.appendChild(chip);
+    });
+    chartsEl.hidden = loaded.length === 0;
+    if (!loaded.length) return;
+    document.querySelectorAll(".tl-plot").forEach((p) => {
+      const kind = p.dataset.k;
+      drawPanel(p, kind, kind === "speed" ? 210 : kind === "delta" ? 110 : 90);
+    });
+  }
+})();
+</script>
+{% endblock %}

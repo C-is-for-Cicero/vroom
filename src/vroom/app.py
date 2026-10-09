@@ -244,6 +244,54 @@ def championship(request: Request, season: int | None = None):
     )
 
 
+@app.get("/telemetry", response_class=HTMLResponse)
+def telemetry_page(request: Request):
+    """Observed fastest-lap telemetry comparison (GP-Tempo style).
+
+    Events = completed rounds (present in core.parquet); drivers per event
+    come from that round's entry list."""
+    import pandas as pd
+
+    try:
+        core = pd.read_parquet(PROCESSED_DIR / "core.parquet")
+    except FileNotFoundError:
+        return templates.TemplateResponse(request, "telemetry.html", {"events_json": "[]"})
+    recent = core[core["season"] >= 2023]
+    events = []
+    for (season, rnd), grp in recent.groupby(["season", "round"]):
+        events.append(
+            {
+                "season": int(season),
+                "round": int(rnd),
+                "name": f"{grp['race_name'].iloc[0]} {int(season)}",
+                "drivers": sorted(grp["driver_code"].dropna().unique().tolist()),
+            }
+        )
+    events.sort(key=lambda e: (e["season"], e["round"]), reverse=True)
+    return templates.TemplateResponse(
+        request, "telemetry.html", {"events_json": json.dumps(events)}
+    )
+
+
+@app.get("/api/telemetry/{season}/{round_number}/{session_code}/{driver_code}")
+def telemetry_api(season: int, round_number: int, session_code: str, driver_code: str):
+    """Fastest-lap channels for one driver; downloads+caches the session on
+    first access (can take a minute). Observed data, not predictions."""
+    from f1pred.ingest.telemetry import fastest_lap_channels
+
+    if session_code not in {"FP1", "FP2", "FP3", "SQ", "S", "Q", "R"}:
+        raise HTTPException(400, "unknown session code")
+    try:
+        return fastest_lap_channels(season, round_number, session_code, driver_code)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            502, f"could not load {session_code} {season} round {round_number}: "
+                 f"{type(exc).__name__}"
+        ) from exc
+
+
 @app.get("/track-record", response_class=HTMLResponse)
 def track_record(request: Request):
     try:
