@@ -47,6 +47,11 @@ def main(argv: list[str] | None = None) -> int:
         help="first season to pull FastF1 lap data for (earlier seasons cost "
              "API budget without being used by the current models)",
     )
+    parser.add_argument(
+        "--telemetry", action="store_true",
+        help="also build telemetry car profiles + track fingerprints "
+             "(heavy: downloads FP telemetry, ~50-150MB per weekend)",
+    )
     args = parser.parse_args(argv)
     seasons = parse_seasons(args.seasons)
 
@@ -77,6 +82,17 @@ def main(argv: list[str] | None = None) -> int:
                 built = build_fp_longrun(season, rounds)
                 print(f"fp_longrun {season}: "
                       f"{0 if built.empty else built['round'].nunique()} rounds")
+            if args.telemetry:
+                from f1pred.features.car_profile import build_telemetry_features
+
+                for season in lap_seasons:
+                    rounds = [
+                        int(r)
+                        for r in sorted(core.loc[core["season"] == season, "round"].unique())
+                    ]
+                    built = build_telemetry_features(season, rounds)
+                    print(f"telemetry {season}: "
+                          f"{0 if built.empty else built['round'].nunique()} rounds")
         except FastF1BudgetExhausted as exc:
             print(f"\nFastF1 hourly API budget exhausted ({exc}).")
             print("All progress so far is saved - run this exact command again in "

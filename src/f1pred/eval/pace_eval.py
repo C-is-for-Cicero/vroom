@@ -44,6 +44,30 @@ MODES: dict[str, tuple[list[str], str, Callable[[pd.DataFrame], pd.Series]]] = {
 }
 
 
+def merge_telemetry_features(df: pd.DataFrame, seasons: list[int]) -> pd.DataFrame:
+    """Merge tel_driver + tel_track parquets and add interactions; columns
+    exist (as NaN) even for rounds without telemetry built."""
+    import numpy as np
+
+    from f1pred.features.car_profile import load_telemetry_features
+    from f1pred.features.interactions import add_telemetry_interactions
+
+    drv, trk = load_telemetry_features(seasons)
+    if drv.empty:
+        for col in ("tel_slow_s", "tel_med_s", "tel_fast_s", "tel_top_speed", "tel_fade"):
+            df[col] = np.nan
+    else:
+        df = df.merge(drv, on=["season", "round", "driver_code"], how="left")
+    if trk.empty:
+        for col in ("trk_slow_share", "trk_med_share", "trk_fast_share",
+                    "trk_straight_share", "trk_full_throttle",
+                    "trk_longest_straight_m", "trk_heavy_brakes"):
+            df[col] = np.nan
+    else:
+        df = df.merge(trk, on=["season", "round"], how="left")
+    return add_telemetry_interactions(df)
+
+
 def load_dataset() -> pd.DataFrame:
     """Core table + race-pace target + FP long runs, restricted to seasons
     with targets."""
@@ -53,6 +77,7 @@ def load_dataset() -> pd.DataFrame:
     seasons = sorted(core["season"].unique())
     df = core.merge(load_race_pace(seasons), on=["season", "round", "driver_code"], how="left")
     df = df.merge(load_fp_longrun(seasons), on=["season", "round", "driver_code"], how="left")
+    df = merge_telemetry_features(df, seasons)
     df = add_pace_form_features(df)
     seasons_with_target = sorted(df.loc[df["pace_delta_s"].notna(), "season"].unique())
     return df[df["season"].isin(seasons_with_target)].reset_index(drop=True)

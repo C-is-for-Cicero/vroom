@@ -28,6 +28,9 @@ def synthetic_dataset(n_races: int = 40, n_drivers: int = 10, seed: int = 1) -> 
                     "fp_longrun_delta_s": np.nan,
                     "fp_deg_slope": np.nan,
                     "fp_consistency": np.nan,
+                    **{f: np.nan for f in (
+                        "tel_slow_s", "tel_med_s", "tel_fast_s", "tel_top_speed",
+                        "tel_fade", "ix_slow", "ix_med", "ix_fast", "ix_straight")},
                     "pace_delta_s": quali[d] * 0.8 + rng.normal(0, 0.1),
                 }
             )

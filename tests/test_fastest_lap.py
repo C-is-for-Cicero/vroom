@@ -29,6 +29,9 @@ def _dataset(n_races: int = 30, n_drivers: int = 10, seed: int = 3) -> pd.DataFr
                     "fp_longrun_delta_s": np.nan,
                     "fp_deg_slope": np.nan,
                     "fp_consistency": np.nan,
+                    **{f: np.nan for f in (
+                        "tel_slow_s", "tel_med_s", "tel_fast_s", "tel_top_speed",
+                        "tel_fade", "ix_slow", "ix_med", "ix_fast", "ix_straight")},
                     "is_fastest_lap": d == fl,
                 }
             )

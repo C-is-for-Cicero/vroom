@@ -202,3 +202,22 @@ the fixed 50/50 ensemble with that prior beats it on log-loss. The blend
 is the shipping candidate for the fastest-lap market. Fastest lap is
 intrinsically noisy (no bonus point since 2025, often set on a late free
 pit stop) — hit@1 ≈ 0.30 against 20 drivers is the realistic ceiling area.
+
+## 2026-10-09 — step 5 full: telemetry car profile + fingerprint (infrastructure)
+
+Implements the car-profile × track-fingerprint design: FP telemetry is
+segmented into corner zones from the circuit's corner markers, classified
+slow/med/fast by apex minimum speed, and each driver's fastest FP lap is
+compared to the session best per class (time deltas), plus top-speed delta
+and energy fade on the longest straight. The same reference lap yields the
+track fingerprint (corner-class time shares, straight share, % full
+throttle, heavy-brake count). Interactions (deficit × share) feed both
+pace models. Cutoff: end of FP — valid pre-quali.
+
+Validated on real data (2026 Baku: NOR/ANT/VER lose least slow-corner
+time; midfield loses 2.2-2.5 s). Eval is UNCHANGED at this entry
+(pre-quali Spearman 0.6718): historical telemetry coverage is 2 events,
+so the features are inert until the backfill runs
+(`python -m f1pred.features --seasons 2018-2026 --race-pace --telemetry`,
+~50-150 MB per weekend, FastF1-budget-aware and resumable). The
+before/after table lands once coverage exists.

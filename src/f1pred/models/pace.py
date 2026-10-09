@@ -20,6 +20,20 @@ import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
 
+# Telemetry car profile × track fingerprint (step 5): from FP of race R,
+# cutoff end of practice — valid in both modes. NaN where not yet built.
+TELEMETRY_FEATURES: list[str] = [
+    "tel_slow_s",
+    "tel_med_s",
+    "tel_fast_s",
+    "tel_top_speed",
+    "tel_fade",
+    "ix_slow",
+    "ix_med",
+    "ix_fast",
+    "ix_straight",
+]
+
 POST_QUALI_FEATURES: list[str] = [
     "grid",
     "quali_position",
@@ -33,6 +47,7 @@ POST_QUALI_FEATURES: list[str] = [
     "fp_longrun_delta_s",
     "fp_deg_slope",
     "fp_consistency",
+    *TELEMETRY_FEATURES,
 ]
 
 # The primary product mode: everything here is known BEFORE qualifying
@@ -52,6 +67,7 @@ PRE_QUALI_FEATURES: list[str] = [
     "fp_longrun_delta_s",
     "fp_deg_slope",
     "fp_consistency",
+    *TELEMETRY_FEATURES,
 ]
 
 SIGMA_FLOOR_S = 0.05

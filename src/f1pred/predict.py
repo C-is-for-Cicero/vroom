@@ -164,6 +164,9 @@ def build_prediction_frame(season: int, round_number: int, mode: str) -> pd.Data
     seasons = sorted(df["season"].unique())
     df = df.merge(load_race_pace(seasons), on=["season", "round", "driver_code"], how="left")
     df = df.merge(load_fp_longrun(seasons), on=["season", "round", "driver_code"], how="left")
+    from f1pred.eval.pace_eval import merge_telemetry_features
+
+    df = merge_telemetry_features(df, seasons)
     # the target race's own pace outcome must never be visible
     target_mask = (df["season"] == key[0]) & (df["round"] == key[1])
     df.loc[target_mask, "pace_delta_s"] = np.nan

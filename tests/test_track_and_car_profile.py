@@ -107,3 +107,68 @@ def test_builders_stop_pass_on_fastf1_rate_limit(tmp_path, monkeypatch):
     with pytest.raises(FastF1BudgetExhausted):
         cp.build_fp_longrun(2024, [1, 2, 3, 4, 5])
     assert calls == {"rp": 1, "cp": 1}  # stopped after the first budget error
+
+
+def test_corner_zone_geometry_and_classes():
+    from f1pred.features.car_profile import classify_zones, corner_zones
+
+    zones = corner_zones([1000.0, 1300.0, 3000.0], 5000.0)
+    # first two zones must split at their midpoint (1150), not overlap
+    assert zones[0][1] == 1150.0 and zones[1][0] == 1150.0
+    assert zones[0][0] == 800.0 and zones[2] == (2800.0, 3150.0)
+
+    dist = np.linspace(0, 5000, 5001)
+    speed = np.full_like(dist, 300.0)
+    speed[(dist > 900) & (dist < 1100)] = 80    # slow
+    speed[(dist > 1200) & (dist < 1400)] = 150  # medium
+    speed[(dist > 2900) & (dist < 3100)] = 250  # fast
+    assert classify_zones(zones, dist, speed) == [0, 1, 2]
+
+
+def test_lap_profile_attributes_time_loss_to_the_right_class():
+    from f1pred.features.car_profile import classify_zones, corner_zones, lap_profile
+
+    dist = np.linspace(0, 5000, 5001)
+
+    def make(speed_slow):
+        speed = np.full_like(dist, 300.0)
+        speed[(dist > 900) & (dist < 1100)] = speed_slow
+        speed[(dist > 2900) & (dist < 3100)] = 250.0
+        kmh_to_ms = 1 / 3.6
+        dt = np.diff(dist) / (speed[:-1] * kmh_to_ms)
+        time_s = np.concatenate([[0.0], np.cumsum(dt)])
+        return speed, time_s
+
+    zones = corner_zones([1000.0, 3000.0], 5000.0)
+    ref_speed, ref_time = make(100.0)
+    classes = classify_zones(zones, dist, ref_speed)
+    ref = lap_profile(dist, ref_time, ref_speed, zones, classes)
+
+    slow_speed, slow_time = make(80.0)  # slower ONLY in the slow corner
+    drv = lap_profile(dist, slow_time, slow_speed, zones, classes)
+
+    assert drv["time_slow"] - ref["time_slow"] > 0.3     # loses real time there
+    assert abs(drv["time_fast"] - ref["time_fast"]) < 1e-6  # identical elsewhere
+    assert drv["top_speed"] == ref["top_speed"]
+    assert ref["longest_straight_m"] > 1500  # the 1150->2800 gap
+
+
+def test_telemetry_interactions():
+    from f1pred.features.interactions import add_telemetry_interactions
+
+    df = pd.DataFrame(
+        {
+            "tel_slow_s": [0.4, np.nan],
+            "tel_med_s": [0.1, 0.1],
+            "tel_fast_s": [0.0, 0.0],
+            "tel_top_speed": [-6.0, -6.0],
+            "trk_slow_share": [0.25, 0.25],
+            "trk_med_share": [0.2, 0.2],
+            "trk_fast_share": [0.1, 0.1],
+            "trk_straight_share": [0.45, 0.45],
+        }
+    )
+    out = add_telemetry_interactions(df)
+    assert abs(out.loc[0, "ix_slow"] - 0.1) < 1e-12
+    assert np.isnan(out.loc[1, "ix_slow"])  # missing telemetry stays missing
+    assert abs(out.loc[0, "ix_straight"] - 2.7) < 1e-12  # deficit x share
